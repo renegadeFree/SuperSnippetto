@@ -6,6 +6,14 @@ import Combine
 private let expansionEventMarker: Int64 = 0x455350414E534F
 private let hotKeySignature: OSType = 0x4553504C
 
+/// Captured before the search panel takes focus; kept in memory for this insertion only.
+struct ExpansionDestination {
+    let application: NSRunningApplication
+    let focus: AXUIElement?
+    let selectedRange: CFTypeRef?
+    let selection: String?
+}
+
 private func expansionTapCallback(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event: CGEvent, _ context: UnsafeMutableRawPointer?) -> Unmanaged<CGEvent>? {
     guard let context else { return Unmanaged.passUnretained(event) }
     return Unmanaged<ExpansionEngine>.fromOpaque(context).takeUnretainedValue().receive(type, event)
@@ -30,6 +38,7 @@ final class ExpansionEngine: ObservableObject {
     var onExpansion: ((Snippet) -> Void)?
     var onShowSearch: (() -> Void)?
     private(set) var lastExternalApplication: NSRunningApplication?
+    private var lastExternalFocus: AXUIElement?
     private struct PendingTrigger {
         var id = UUID()
         var text: String
@@ -67,7 +76,29 @@ final class ExpansionEngine: ObservableObject {
     }
 
     private func rememberExternalApplication() {
-        if let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier != Bundle.main.bundleIdentifier { lastExternalApplication = app }
+        if let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier != Bundle.main.bundleIdentifier {
+            if lastExternalApplication?.processIdentifier != app.processIdentifier { lastExternalFocus = nil }
+            lastExternalApplication = app
+        }
+    }
+
+    func captureDestination() -> ExpansionDestination? {
+        rememberExternalApplication()
+        guard let app = lastExternalApplication, !app.isTerminated else { return nil }
+        let focus: AXUIElement?
+        if AXIsProcessTrusted(), !IsSecureEventInputEnabled() {
+            focus = focusedElement(in: app) ?? lastExternalFocus
+        } else { focus = nil }
+        var focusPID: pid_t = 0
+        if let focus, AXUIElementGetPid(focus, &focusPID) == .success, focusPID == app.processIdentifier, isTextInput(focus) {
+            lastExternalFocus = focus
+            var range: CFTypeRef?; var selection: CFTypeRef?
+            AXUIElementCopyAttributeValue(focus, kAXSelectedTextRangeAttribute as CFString, &range)
+            AXUIElementCopyAttributeValue(focus, kAXSelectedTextAttribute as CFString, &selection)
+            return ExpansionDestination(application: app, focus: focus, selectedRange: range, selection: selection as? String)
+        }
+        // Background apps may expose no focused element. Resolve it after reactivation.
+        return ExpansionDestination(application: app, focus: nil, selectedRange: nil, selection: nil)
     }
 
     deinit {
@@ -148,7 +179,14 @@ final class ExpansionEngine: ObservableObject {
             resetBuffer()
             return Unmanaged.passUnretained(event)
         }
-        guard type == .keyDown else { resetBuffer(); return Unmanaged.passUnretained(event) }
+        guard type == .keyDown else {
+            // A click on our menu/toolbar may deactivate the external field before AppKit handles it.
+            if AXIsProcessTrusted(), let app = NSWorkspace.shared.frontmostApplication,
+               app.bundleIdentifier != Bundle.main.bundleIdentifier, let focus = focusedElement(in: app), isTextInput(focus) {
+                rememberExternalApplication(); lastExternalFocus = focus
+            }
+            resetBuffer(); return Unmanaged.passUnretained(event)
+        }
         guard running, contextAllowsExpansion() else { resetBuffer(); return Unmanaged.passUnretained(event) }
         if event.flags.intersection([.maskCommand, .maskControl, .maskAlternate]).isEmpty == false {
             resetBuffer(); return Unmanaged.passUnretained(event)
@@ -185,7 +223,7 @@ final class ExpansionEngine: ObservableObject {
     private func contextAllowsExpansion() -> Bool {
         guard !IsSecureEventInputEnabled(), AXIsProcessTrusted(), let application = NSWorkspace.shared.frontmostApplication else { return false }
         guard application.bundleIdentifier != Bundle.main.bundleIdentifier else { return false }
-        lastExternalApplication = application
+        rememberExternalApplication()
         guard libraryAllows(application.bundleIdentifier ?? "") else { return false }
         let appElement = AXUIElementCreateApplication(application.processIdentifier)
         var value: CFTypeRef?
@@ -196,6 +234,12 @@ final class ExpansionEngine: ObservableObject {
         let element = value as! AXUIElement
         if let focusedElement, !CFEqual(focusedElement, element) { buffer = "" }
         self.focusedElement = element
+        guard isTextInput(element) else { return false }
+        lastExternalFocus = element
+        return true
+    }
+
+    private func isTextInput(_ element: AXUIElement) -> Bool {
         var subrole: CFTypeRef?
         AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole)
         guard (subrole as? String) != (kAXSecureTextFieldSubrole as String) else { return false }
@@ -259,12 +303,11 @@ final class ExpansionEngine: ObservableObject {
         else { onError?("Una scorciatoia è già in uso o non è disponibile (\(result)).") }
     }
 
-    func expand(_ snippet: Snippet, deleteCount: Int = 0, typedAbbreviation: String = "", trailingDelimiter: String = "") {
+    func expand(_ snippet: Snippet, deleteCount: Int = 0, typedAbbreviation: String = "", trailingDelimiter: String = "", destination: ExpansionDestination? = nil) {
         let trigger = pendingTrigger
         pendingTrigger = nil
-        rememberExternalApplication()
-        let frontmost = NSWorkspace.shared.frontmostApplication
-        let target = trigger?.target ?? (frontmost?.bundleIdentifier == Bundle.main.bundleIdentifier ? lastExternalApplication : frontmost)
+        let destination = destination ?? captureDestination()
+        let target = trigger?.target ?? destination?.application
         guard !busy, !IsSecureEventInputEnabled(), AXIsProcessTrusted(), let target,
               store.isEnabled(snippet, appID: target.bundleIdentifier ?? "") else {
             if let trigger { recoverSuppressedText(trigger) }
@@ -274,20 +317,14 @@ final class ExpansionEngine: ObservableObject {
             else { onError?("Il frammento non è disponibile nell’app corrente o il campo è protetto.") }
             return
         }
-        let focus = trigger?.focus ?? focusedElement(in: target)
-        guard let focus else {
-            if let trigger { recoverSuppressedText(trigger) }
-            else { onError?("Seleziona prima un campo di testo nell’app di destinazione, poi riapri la ricerca rapida.") }
-            return
-        }
         if let trigger, !sameFocus(target: trigger.target, focus: trigger.focus) { return }
         resetBuffer()
         busy = true
         interrupted = false
         expansionTarget = target
-        expansionFocus = focus
+        expansionFocus = trigger?.focus ?? destination?.focus
         activeTrigger = trigger
-        prepareExpansion(snippet, typedAbbreviation: typedAbbreviation) { [weak self] result in
+        prepareExpansion(snippet, typedAbbreviation: typedAbbreviation, destination: destination) { [weak self] result in
             guard let self else { return }
             switch result {
             case .failure(let error):
@@ -303,17 +340,48 @@ final class ExpansionEngine: ObservableObject {
                     if let trigger, !self.interrupted { self.recoverSuppressedText(trigger) }
                     return
                 }
+                if #available(macOS 14, *) { NSApp.yieldActivation(to: target) }
                 target.activate(options: [])
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    guard !self.interrupted, self.sameFocus(target: target, focus: focus), self.contextAllowsExpansion() else {
+                self.restoreFocus(in: target, destination: trigger == nil ? destination : nil, expected: trigger?.focus, attempt: 0) { focus in
+                    guard !self.interrupted, let focus, self.sameFocus(target: target, focus: focus), self.contextAllowsExpansion() else {
                         self.activeTrigger = nil
                         self.busy = false
                         if let trigger, !self.interrupted { self.recoverSuppressedText(trigger) }
+                        else if !self.interrupted { self.onError?("Non riesco a ripristinare il campo originale in \(target.localizedName ?? "questa app"). Riapri la ricerca dal campo di testo e riprova.") }
                         return
                     }
+                    self.expansionFocus = focus
                     self.deliver(output, snippet: snippet, deleteCount: deleteCount, trailingDelimiter: trailingDelimiter)
                 }
             }
+        }
+    }
+
+    private func restoreFocus(in target: NSRunningApplication, destination: ExpansionDestination?, expected: AXUIElement?, attempt: Int, completion: @escaping (AXUIElement?) -> Void) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self, !self.interrupted, !target.isTerminated, AXIsProcessTrusted(), !IsSecureEventInputEnabled() else { completion(nil); return }
+            if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != target.processIdentifier,
+               front.bundleIdentifier != Bundle.main.bundleIdentifier { completion(nil); return }
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier {
+                let saved = expected ?? destination?.focus
+                if let saved = destination?.focus, self.isTextInput(saved), !self.sameFocus(target: target, focus: saved) {
+                    var window: CFTypeRef?
+                    if AXUIElementCopyAttributeValue(saved, kAXWindowAttribute as CFString, &window) == .success,
+                       let window, CFGetTypeID(window) == AXUIElementGetTypeID() { AXUIElementPerformAction(window as! AXUIElement, kAXRaiseAction as CFString) }
+                    AXUIElementSetAttributeValue(saved, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+                }
+                if let current = self.focusedElement(in: target), self.isTextInput(current), saved == nil || CFEqual(current, saved!) {
+                    if let range = destination?.selectedRange {
+                        var settable = DarwinBoolean(false)
+                        if AXUIElementIsAttributeSettable(current, kAXSelectedTextRangeAttribute as CFString, &settable) == .success, settable.boolValue {
+                            guard AXUIElementSetAttributeValue(current, kAXSelectedTextRangeAttribute as CFString, range) == .success else { completion(nil); return }
+                        }
+                    }
+                    completion(current); return
+                }
+            }
+            guard attempt < 19 else { completion(nil); return }
+            self.restoreFocus(in: target, destination: destination, expected: expected, attempt: attempt + 1, completion: completion)
         }
     }
 
@@ -483,7 +551,7 @@ final class ExpansionEngine: ObservableObject {
         return selected as? String ?? ""
     }
 
-    private func prepareExpansion(_ snippet: Snippet, typedAbbreviation: String, completion: @escaping (Result<ExpansionOutput, Error>) -> Void) {
+    private func prepareExpansion(_ snippet: Snippet, typedAbbreviation: String, destination: ExpansionDestination? = nil, completion: @escaping (Result<ExpansionOutput, Error>) -> Void) {
         do {
             if snippet.kind == .image {
                 let path = (snippet.content as NSString).expandingTildeInPath
@@ -491,12 +559,15 @@ final class ExpansionEngine: ObservableObject {
                 completion(.success(ExpansionOutput(text: "", richData: data, richType: .tiff)))
                 return
             }
-            var context = RenderContext(clipboard: NSPasteboard.general.string(forType: .string) ?? "", selection: selectedText())
+            var context = RenderContext(clipboard: NSPasteboard.general.string(forType: .string) ?? "", selection: destination?.selection ?? selectedText())
             let rich = snippet.kind == .rich || snippet.kind == .html
             if rich { context.clipboard = escapeHTML(context.clipboard); context.selection = escapeHTML(context.selection) }
             context.lookup = { [weak self] abbreviation in
                 guard let self else { return nil }
-                let candidates = self.store.data.snippets.filter { self.snippetAllowed($0) }
+                let candidates = self.store.data.snippets.filter {
+                    if let destination { return self.store.isEnabled($0, appID: destination.application.bundleIdentifier ?? "") }
+                    return self.snippetAllowed($0)
+                }
                 let found = UUID(uuidString: abbreviation).flatMap { id in candidates.first { $0.id == id } }
                     ?? candidates.first { $0.matchesAbbreviation(abbreviation) }
                 // Nested script/image snippets require a different execution pipeline.
@@ -692,6 +763,19 @@ private enum LocalScriptRunner {
 
 
 #if ENGINE_SELF_TEST
+extension ExpansionEngine {
+    fileprivate func checkCapturedSelection() {
+        let target = NSRunningApplication.current
+        let destination = ExpansionDestination(application: target, focus: nil, selectedRange: nil, selection: "selezione originale")
+        var text: String?
+        lastExternalApplication = nil
+        prepareExpansion(Snippet(content: "{{selection}}"), typedAbbreviation: "", destination: destination) { result in text = try? result.get().text }
+        assert(text == "selezione originale")
+        let empty = ExpansionDestination(application: target, focus: nil, selectedRange: nil, selection: "")
+        prepareExpansion(Snippet(content: "prima{{selection}}dopo"), typedAbbreviation: "", destination: empty) { result in text = try? result.get().text }
+        assert(text == "primadopo")
+    }
+}
 @main
 private enum EngineSelfTest {
     static func main() throws {
@@ -708,7 +792,9 @@ private enum EngineSelfTest {
         expectFailure { _ = try LocalScriptRunner.run(code: "sleep 10", kind: .shell) }
         assert(Date().timeIntervalSince(start) < 7)
         try searchHotkeyChecks()
-        print("Engine: 12 script/output/timeout and native hotkey checks passed")
+        let selectionStore = LibraryStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("selection-test-\(UUID()).json"))
+        ExpansionEngine(store: selectionStore).checkCapturedSelection()
+        print("Engine: 14 script/output/timeout, captured selection and native hotkey checks passed")
     }
 
     static func searchHotkeyChecks() throws {

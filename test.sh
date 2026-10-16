@@ -5,6 +5,8 @@ task_test_dir="$(mktemp -d "${TMPDIR:-/tmp}/espanso-tests.XXXXXX")"
 trap 'rm -rf "$task_test_dir"' EXIT
 xcrun swiftc -swift-version 5 -module-cache-path "$task_test_dir/cache" Source/Core.swift Source/LZ4Frame.swift Source/ATextImport.swift Source/LegacyAText.swift Source/ATextMacros.swift Tests/CoreTests.swift -o "$task_test_dir/CoreTests"
 "$task_test_dir/CoreTests"
+xcrun swiftc -swift-version 5 -module-cache-path "$task_test_dir/cache" Source/Core.swift Source/LZ4Frame.swift Source/ATextImport.swift Source/LegacyAText.swift Source/ATextMacros.swift Source/QuickSearch.swift Tests/QuickSearchTests.swift -o "$task_test_dir/QuickSearchTests"
+"$task_test_dir/QuickSearchTests"
 xcrun swiftc -swift-version 5 -module-cache-path "$task_test_dir/cache" Source/Core.swift Source/LZ4Frame.swift Source/ATextImport.swift Source/LegacyAText.swift Source/ATextMacros.swift Tests/TemplateTests.swift -o "$task_test_dir/TemplateTests"
 "$task_test_dir/TemplateTests"
 xcrun swiftc -swift-version 5 -D ENGINE_SELF_TEST -module-cache-path "$task_test_dir/cache" Source/Core.swift Source/LZ4Frame.swift Source/ATextImport.swift Source/LegacyAText.swift Source/ATextMacros.swift Source/ExpansionEngine.swift -o "$task_test_dir/EngineTests"

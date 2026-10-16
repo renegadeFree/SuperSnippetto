@@ -17,6 +17,23 @@ enum SnippetKind: String, Codable, CaseIterable { case plain, rich, html, image,
 enum TriggerMode: String, Codable, CaseIterable { case immediate, delimiterKeep, delimiterDiscard, manual }
 enum AppScope: String, Codable, CaseIterable { case all, only, except }
 
+enum SnippetSearch {
+    static func results(_ snippets: [Snippet], query: String) -> [Snippet] {
+        snippets.filter {
+            $0.enabled && (query.isEmpty || ($0.title + " " + $0.allAbbreviations.joined(separator: " ") + " " + $0.content).localizedCaseInsensitiveContains(query))
+        }.sorted {
+            if $0.useCount != $1.useCount { return $0.useCount > $1.useCount }
+            let order = $0.title.localizedStandardCompare($1.title)
+            return order == .orderedSame ? $0.id.uuidString < $1.id.uuidString : order == .orderedAscending
+        }
+    }
+    static func moving(_ selection: UUID?, by offset: Int, in results: [Snippet]) -> UUID? {
+        guard !results.isEmpty else { return nil }
+        let current = results.firstIndex { $0.id == selection } ?? (offset > 0 ? -1 : results.count)
+        return results[max(0, min(results.count - 1, current + offset))].id
+    }
+}
+
 struct Snippet: Codable, Identifiable, Equatable {
     var id = UUID()
     var title = "Nuovo frammento"

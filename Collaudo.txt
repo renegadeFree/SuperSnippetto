@@ -1,3 +1,31 @@
+AGGIORNAMENTO 0.3.4 — RICERCA E CAMPO ORIGINALE
+Ricerca con titolo, abbreviazioni/alias e anteprima di testo, anche per HTML.
+L’anteprima è statica, non esegue script e non carica risorse HTML remote.
+Campo di ricerca nativo con focus all’apertura: ↑/↓ cambiano selezione,
+Invio e il pulsante Inserisci condividono lo stesso percorso di inserimento.
+Ordinamento stabile a parità di utilizzi e scorrimento del risultato selezionato.
+La presentazione è differita oltre l’evento di apertura; il focus viene assegnato
+quando il pannello diventa key, senza chiuderlo per transizioni interne del focus.
+
+La destinazione (processo, campo AX, range e testo selezionati) viene acquisita
+prima di portare la ricerca in primo piano. L’inserimento riattiva l’app originale,
+ripristina campo e selezione e attende fino a un secondo la conferma del focus.
+Se non è disponibile un campo mentre l’app è in background, la ricerca del campo
+viene differita dopo la riattivazione. Non si inserisce in un campo diverso da
+quello acquisito, in un campo protetto o dopo un’interruzione dell’utente.
+La selezione originale è disponibile anche alla variabile {{selection}}.
+
+619 controlli passati: Core121, ricerca31, template39, engine14,
+automazione23, sync94, LZ4frame109, aTextImport56, aTextMacro70, legacy62.
+Suite completa passata; dopo l’ultima modifica mirata, ripetuti motore e ricerca.
+Verificati nell’app installata: apertura stabile, campo subito focalizzato,
+digitazione senza clic e filtraggio dei risultati. I comandi della tastiera sono
+anche verificati attraverso il delegate nativo senza inviare input esterno.
+Confronto della libreria prima/dopo l’aggiornamento: nessuna modifica a dati,
+raccolte, cestino o impostazioni. Bundle installato uguale a quello distribuito.
+La conferma dell’inserimento esterno con input reale è in attesa della prova
+dell’utente dopo la riabilitazione dei permessi macOS per la nuova firma ad hoc.
+
 AGGIORNAMENTO 0.3.3 — RICERCA RAPIDA
 Scorciatoia globale persistente configurabile nelle impostazioni, controllo
 collisioni con frammenti e registrazioni Carbon, ripristino del valore originale.

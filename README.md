@@ -24,7 +24,7 @@ La prima volta concedi personalmente Accessibilità e Monitoraggio input dalle I
 ## Funzioni disponibili
 
 - Libreria di frammenti e raccolte, ricerca, alias, menu e scorciatoie.
-- Ricerca rapida con scorciatoia globale modificabile nelle impostazioni, chiusura con clic esterno o Esc.
+- Ricerca rapida con scorciatoia modificabile, anteprime, navigazione ↑/↓, Invio per inserire nel campo originale, chiusura con clic esterno o Esc.
 - Testo, rich text, HTML, immagini locali e script con abilitazione esplicita.
 - Campi, menu di scelta, checkbox, date, condizioni e trasformazioni.
 - Backup, cestino recuperabile e sincronizzazione tramite cartella.
@@ -51,9 +51,9 @@ Restano compatibili anche gli identificatori interni dei documenti e il file di 
 ./test.sh
 ```
 
-586 controlli locali su libreria, modelli, script, automazione, sincronizzazione, decoder LZ4 e importazione/conversione aText. I test usano dati sintetici e temporanei. `NSFileCoordinator` richiede l'accesso al servizio macOS e può non funzionare dentro sandbox di esecuzione esterni.
+619 controlli locali su libreria, modelli, script, automazione, sincronizzazione, decoder LZ4 e importazione/conversione aText. I test usano dati sintetici e temporanei. `NSFileCoordinator` richiede l'accesso al servizio macOS e può non funzionare dentro sandbox di esecuzione esterni.
 
-La scorciatoia predefinita della ricerca è ⌃⌥Spazio: cambiala da Impostazioni > Ricerca rapida > Modifica, oppure usa Ripristina. Le combinazioni già assegnate ai frammenti o occupate nel sistema vengono segnalate; la preferenza resta locale al Mac. La ricerca usa la registrazione nativa delle scorciatoie e non richiede i permessi per l’espansione.
+La scorciatoia predefinita della ricerca è ⌃⌥Spazio: cambiala da Impostazioni > Ricerca rapida > Modifica, oppure usa Ripristina. Le combinazioni già assegnate ai frammenti o occupate nel sistema vengono segnalate; la preferenza resta locale al Mac. La ricerca mostra titolo, abbreviazioni e anteprima del testo. Il campo riceve il focus all’apertura: digita, seleziona con ↑/↓ e premi Invio oppure Inserisci. Prima dell’apertura viene conservata la destinazione; l’app riattiva la finestra originale e ripristina campo e selezione prima dell’inserimento. La ricerca usa la registrazione nativa delle scorciatoie e non richiede i permessi per l’espansione.
 
 Build, firma e interfaccia sono verificate sul Mac locale. L'espansione globale e le scorciatoie nelle altre app richiedono ancora collaudo dopo i consensi macOS dell'utente; la sincronizzazione non è ancora collaudata fra due Mac fisici con un provider cloud reale.
 

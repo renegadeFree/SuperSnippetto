@@ -20,50 +20,6 @@ extension AppScope {
     var label: String { switch self { case .all: return "Tutte le app"; case .only: return "Solo queste app"; case .except: return "Tutte tranne queste app" } }
 }
 
-extension SearchHotkey {
-    var label: String {
-        let special = [36: "Invio", 48: "Tab", 49: "Spazio", 51: "⌫", 117: "⌦", 123: "←", 124: "→", 125: "↓", 126: "↑"]
-        var key = special[keyCode] ?? "tasto \(keyCode)"
-        if special[keyCode] == nil, let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
-           let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) {
-            let data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue()
-            let layout = UnsafeRawPointer(CFDataGetBytePtr(data)).assumingMemoryBound(to: UCKeyboardLayout.self)
-            var dead: UInt32 = 0; var length = 0; var characters = [UniChar](repeating: 0, count: 8)
-            if UCKeyTranslate(layout, UInt16(keyCode), UInt16(kUCKeyActionDisplay), 0, UInt32(LMGetKbdType()), UInt32(kUCKeyTranslateNoDeadKeysBit), &dead, characters.count, &length, &characters) == noErr, length > 0 {
-                let translated = String(utf16CodeUnits: characters, count: length)
-                if !translated.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) || (0xF700...0xF8FF).contains($0.value) }) { key = translated.uppercased() }
-            }
-        }
-        return (modifiers & UInt32(controlKey) != 0 ? "⌃" : "") + (modifiers & UInt32(optionKey) != 0 ? "⌥" : "") + (modifiers & UInt32(shiftKey) != 0 ? "⇧" : "") + (modifiers & UInt32(cmdKey) != 0 ? "⌘" : "") + key
-    }
-}
-
-final class QuickSearchPanel: NSPanel {
-    private var localClick: Any?
-    private var globalClick: Any?
-    private var deactivationObserver: NSObjectProtocol?
-    init() {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 560, height: 440), styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
-        title = "Cerca e inserisci"; level = .floating; isReleasedWhenClosed = false
-        let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
-        localClick = NSEvent.addLocalMonitorForEvents(matching: clicks) { [weak self] event in
-            if let self, self.isVisible, event.window !== self { self.orderOut(nil) }
-            return event
-        }
-        globalClick = NSEvent.addGlobalMonitorForEvents(matching: clicks) { [weak self] _ in
-            if self?.isVisible == true { self?.orderOut(nil) }
-        }
-        deactivationObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.orderOut(nil) }
-    }
-    override func resignKey() { super.resignKey(); orderOut(nil) }
-    override func cancelOperation(_ sender: Any?) { orderOut(sender) }
-    deinit {
-        if let localClick { NSEvent.removeMonitor(localClick) }
-        if let globalClick { NSEvent.removeMonitor(globalClick) }
-        if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
-    }
-}
-
 final class DesktopDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -81,7 +37,7 @@ final class DesktopController: ObservableObject {
     @Published var showingHelp = false
     @Published var showingBackups = false
     @Published var showingTrash = false
-    private var quickPanel: NSPanel?
+    private var quickPanel: QuickSearchPanel?
     private var cancellables = Set<AnyCancellable>()
     init(store: LibraryStore, engine: ExpansionEngine) {
         self.store = store; self.engine = engine; self.folderSync = LibraryFolderSync(store: store)
@@ -96,13 +52,19 @@ final class DesktopController: ObservableObject {
         folderSync.start()
     }
     func showQuickSearch() {
+        let destination = engine.captureDestination()
+        // Finish the invoking menu/button event before presenting a window that dismisses on outside clicks.
+        DispatchQueue.main.async { [weak self] in self?.presentQuickSearch(destination: destination) }
+    }
+    private func presentQuickSearch(destination: ExpansionDestination?) {
         if quickPanel == nil {
             quickPanel = QuickSearchPanel()
         }
         quickPanel?.contentView = NSHostingView(rootView: QuickSearchView(store: store) { [weak self] snippet in
             self?.quickPanel?.orderOut(nil)
-            self?.engine.expand(snippet)
+            DispatchQueue.main.async { self?.engine.expand(snippet, destination: destination) }
         })
+        quickPanel?.contentView?.layoutSubtreeIfNeeded()
         quickPanel?.center(); quickPanel?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
     }
     func importLibrary() {
@@ -576,23 +538,6 @@ struct HotkeyCaptureSheet: View {
             .onAppear { engine.recordingHotkey = true }
             .onDisappear { engine.recordingHotkey = false }
     }
-}
-
-struct QuickSearchView: View {
-    @ObservedObject var store: LibraryStore
-    let insert: (Snippet) -> Void
-    @State private var query = ""
-    @State private var selected: UUID?
-    @FocusState private var focused: Bool
-    private var matches: [Snippet] { store.data.snippets.filter { $0.enabled && (query.isEmpty || ($0.title + " " + $0.allAbbreviations.joined(separator: " ") + " " + $0.content).localizedCaseInsensitiveContains(query)) }.sorted { $0.useCount > $1.useCount } }
-    var body: some View {
-        VStack {
-            TextField("Cerca un frammento…", text: $query).textFieldStyle(.roundedBorder).focused($focused).onSubmit { choose() }
-            List(selection: $selected) { ForEach(matches) { snippet in HStack { VStack(alignment: .leading) { Text(snippet.title); Text(snippet.abbreviation).font(.caption).foregroundStyle(.secondary) }; Spacer(); Button("Inserisci") { insert(snippet) } }.tag(snippet.id) } }
-            HStack { Text("\(store.data.effectiveSearchHotkey.label) · Invio inserisce · Esc chiude").font(.caption).foregroundStyle(.secondary); Spacer(); Button("Inserisci", action: choose).disabled(matches.isEmpty) }
-        }.padding(15).onAppear { DispatchQueue.main.async { focused = true }; selected = matches.first?.id }.onChange(of: query) { _ in selected = matches.first?.id }
-    }
-    private func choose() { if let snippet = matches.first(where: { $0.id == selected }) ?? matches.first { insert(snippet) } }
 }
 
 struct PreferencesView: View {
