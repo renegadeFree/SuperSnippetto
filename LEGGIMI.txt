@@ -1,4 +1,4 @@
-SUPERSNIPPETTO 0.3.4
+SUPERSNIPPETTO 0.3.5
 Implementazione macOS indipendente di un espansore di testo.
 La ricostruzione integrale di aText resta incompleta: Verifica.txt e
 Analisi/Copertura.csv descrivono puntualmente lo stato.
@@ -35,6 +35,14 @@ desktop), il passaggio a un’altra app o Esc chiudono la ricerca.
 La ricerca non richiede i permessi di espansione; l’inserimento nelle altre
 app continua a richiedere i normali consensi macOS.
 
+PREDEFINITI DEI NUOVI FRAMMENTI
+Impostazioni > Predefiniti dei nuovi frammenti > Quando espandere.
+Scegli Appena digitata, Dopo separatore conservandolo o rimuovendolo,
+oppure Solo menu o scorciatoia. Sono disponibili anche le regole di parola
+e maiuscole. Valgono solo per Nuovo: quelli esistenti, duplicati e importati
+conservano le proprie impostazioni. Ripristina predefiniti torna ai valori
+originali. I predefiniti sono salvati localmente e sopravvivono al riavvio.
+
 MODULI
 Nella tua libreria è presente un esempio disattivato “Demo modulo (anteprima)”.
 Selezionalo e scegli Anteprima con campi per provarlo senza inserire testo
@@ -66,6 +74,14 @@ I frammenti rimossi vanno nel cestino recuperabile. Prima di svuotarlo viene
 creato un backup. I backup sono JSON non cifrati, da conservare con cura.
 
 SINCRONIZZAZIONE
+Per iCloud: Impostazioni > Sincronizzazione tramite cartella > Usa iCloud Drive.
+La raccolta viene salvata nella cartella iCloud Drive/SuperSnippetto. Una copia
+locale rimane disponibile; i dati già presenti vengono uniti, senza cancellare
+la libreria. Sugli altri Mac usa la stessa opzione con lo stesso account iCloud.
+Mostra database in iCloud apre la cartella. Disattiva ferma la sincronizzazione
+e conserva entrambe le copie. Se iCloud Drive non è attivo, l’app lo segnala.
+Il trasferimento in rete è gestito da macOS/iCloud Drive.
+
 Impostazioni > Sincronizzazione > Scegli cartella. Sugli altri Mac scegli una
 cartella replicata dal tuo provider (iCloud Drive, Dropbox, OneDrive, rete...).
 Il provider trasferisce il file; l’app unisce frammenti, raccolte e cestino.
@@ -116,5 +132,5 @@ Import unisce i dati senza sostituire silenziosamente elementi differenti.
 Le macro specifiche di TextExpander non sono convertite; .atext è parziale.
 Vedi Analisi/Importazione-aText.json per evidenze e limiti della conversione.
 ./build.sh ricompila e firma localmente con i Command Line Tools Apple.
-./test.sh esegue i 619 controlli; non simula input né abilita permessi di sistema.
+./test.sh esegue i 641 controlli; non simula input né abilita permessi di sistema.
 Source/ contiene il codice, Tests/ i controlli, Analisi/ le evidenze e copertura.

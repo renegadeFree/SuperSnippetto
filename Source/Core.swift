@@ -17,6 +17,13 @@ enum SnippetKind: String, Codable, CaseIterable { case plain, rich, html, image,
 enum TriggerMode: String, Codable, CaseIterable { case immediate, delimiterKeep, delimiterDiscard, manual }
 enum AppScope: String, Codable, CaseIterable { case all, only, except }
 
+struct SnippetDefaults: Codable, Equatable {
+    var trigger: TriggerMode = .immediate
+    var wholeWord = true
+    var caseSensitive = false
+    var adaptCase = false
+}
+
 enum SnippetSearch {
     static func results(_ snippets: [Snippet], query: String) -> [Snippet] {
         snippets.filter {
@@ -96,6 +103,7 @@ struct LibraryData: Codable, Equatable {
     var backupRetention: Int? = nil
     var backupFolder: String? = nil
     var searchHotkey: SearchHotkey? = nil
+    var snippetDefaults: SnippetDefaults? = nil
     var effectiveSearchHotkey: SearchHotkey { searchHotkey ?? .standard }
     func searchHotkeyConflict(_ hotkey: SearchHotkey) -> Bool {
         snippets.contains { $0.hotkeyCode == hotkey.keyCode && $0.hotkeyModifiers == hotkey.modifiers }
@@ -132,6 +140,10 @@ final class LibraryStore: ObservableObject {
     private var recoveryBackupFolder: String?
     var effectiveBackupIntervalMinutes: Int { data.backupIntervalMinutes ?? 1440 }
     var effectiveBackupRetention: Int { data.backupRetention ?? 100 }
+    func makeSnippet(groupID: UUID? = nil) -> Snippet {
+        let defaults = data.snippetDefaults ?? SnippetDefaults()
+        return Snippet(groupID: groupID, trigger: defaults.trigger, caseSensitive: defaults.caseSensitive, wholeWord: defaults.wholeWord, adaptCase: defaults.adaptCase)
+    }
     var backupsDirectory: URL {
         if let path = recoveryBackupFolder ?? data.backupFolder, !path.isEmpty {
             return URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)

@@ -121,7 +121,33 @@ struct CoreTests {
         try aliasChecks(root: root)
         try importWarningChecks(root: root)
         try searchHotkeyChecks(root: root)
+        try newSnippetDefaultsChecks(root: root)
         print("CoreTests: \(checks) checks passed")
+    }
+
+    static func newSnippetDefaultsChecks(root: URL) throws {
+        let store = LibraryStore(url: root.appendingPathComponent("defaults/library.json"))
+        let original = Snippet(title: "Existing", trigger: .manual)
+        store.data.snippets = [original]
+        check(store.makeSnippet().trigger == .immediate, "older libraries keep immediate default for new snippets")
+        check(store.makeSnippet().wholeWord, "older libraries keep word boundary default")
+        let group = UUID()
+        store.data.snippetDefaults = SnippetDefaults(trigger: .delimiterDiscard, wholeWord: false, caseSensitive: true, adaptCase: true)
+        let created = store.makeSnippet(groupID: group)
+        check(created.trigger == .delimiterDiscard && !created.wholeWord && created.caseSensitive && created.adaptCase, "new snippets inherit all global creation defaults")
+        check(created.groupID == group, "new snippet retains selected group")
+        check(store.data.snippets == [original], "changing creation defaults never edits existing snippets")
+        check(created.id != store.makeSnippet().id, "each created snippet gets a unique identity")
+        try store.save()
+        let reopened = LibraryStore(url: store.fileURL)
+        check(reopened.data.snippetDefaults == store.data.snippetDefaults, "creation defaults survive restart")
+        check(reopened.data.snippets == [original], "existing trigger survives restart unchanged")
+        for trigger in TriggerMode.allCases {
+            reopened.data.snippetDefaults?.trigger = trigger
+            check(reopened.makeSnippet().trigger == trigger, "all trigger defaults supported")
+        }
+        reopened.data.snippetDefaults = nil
+        check(reopened.makeSnippet().trigger == .immediate && reopened.makeSnippet().wholeWord, "reset restores original defaults")
     }
 
     static func searchHotkeyChecks(root: URL) throws {

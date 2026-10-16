@@ -316,7 +316,7 @@ struct LibraryView: View {
     private func snippetBinding(_ id: UUID) -> Binding<Snippet> {
         Binding(get: { store.data.snippets.first { $0.id == id } ?? Snippet() }, set: { value in if let i = store.data.snippets.firstIndex(where: { $0.id == id }) { store.data.snippets[i] = value } })
     }
-    private func addSnippet() { var snippet = Snippet(); snippet.title = "Nuovo frammento"; snippet.groupID = groupID; store.data.snippets.append(snippet); selectedID = snippet.id }
+    private func addSnippet() { let snippet = store.makeSnippet(groupID: groupID); store.data.snippets.append(snippet); selectedID = snippet.id }
     private func duplicate(_ value: Snippet) { var copy = value; copy.id = UUID(); copy.title += " — copia"; copy.abbreviation = ""; copy.hotkeyCode = nil; copy.useCount = 0; store.data.snippets.append(copy); selectedID = copy.id }
     private func groupDepth(_ id: UUID) -> Int { var current = id; var seen = Set<UUID>(); var depth = 0; while let p = store.data.groups.first(where: { $0.id == current })?.parentID, seen.insert(p).inserted { depth += 1; current = p }; return min(depth, 8) }
     private func isDescendant(_ id: UUID, of ancestor: UUID) -> Bool { var current: UUID? = id; var seen = Set<UUID>(); while let c = current, seen.insert(c).inserted { if c == ancestor { return true }; current = store.data.groups.first(where: { $0.id == c })?.parentID }; return false }
@@ -548,6 +548,10 @@ struct PreferencesView: View {
     @State private var loginError: String?
     @State private var capturingSearchHotkey = false
     @State private var searchHotkeyError: String?
+    @State private var cloudError: String?
+    private var defaults: Binding<SnippetDefaults> {
+        Binding(get: { store.data.snippetDefaults ?? SnippetDefaults() }, set: { store.data.snippetDefaults = $0 })
+    }
     var body: some View {
         Form {
             Section("Ricerca rapida") {
@@ -567,6 +571,18 @@ struct PreferencesView: View {
                 TextField("Separatori", text: Binding(get: { store.data.delimiters.replacingOccurrences(of: "\t", with: "\\t").replacingOccurrences(of: "\n", with: "\\n") }, set: { store.data.delimiters = $0.replacingOccurrences(of: "\\t", with: "\t").replacingOccurrences(of: "\\n", with: "\n") }))
                 Text("Uno spazio è un separatore. Usa \\t per Tab e \\n per Invio.").font(.caption).foregroundStyle(.secondary)
                 TextField("App escluse (bundle ID, separati da virgole)", text: Binding(get: { store.data.excludedApps.joined(separator: ",") }, set: { store.data.excludedApps = $0.split(separator: ",", omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } }))
+            }
+            Section("Predefiniti dei nuovi frammenti") {
+                Picker("Quando espandere", selection: defaults.trigger) {
+                    ForEach(TriggerMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                Toggle("Solo all’inizio di una parola", isOn: defaults.wholeWord)
+                Toggle("Distingui maiuscole e minuscole", isOn: defaults.caseSensitive)
+                Toggle("Adatta le maiuscole al testo digitato", isOn: defaults.adaptCase)
+                HStack {
+                    Text("Valgono solo per i frammenti che crei con Nuovo. Quelli esistenti, duplicati o importati conservano le proprie regole.").font(.caption).foregroundStyle(.secondary)
+                    Button("Ripristina predefiniti") { store.data.snippetDefaults = nil }
+                }
             }
             Section("Sistema") {
                 HStack { Text(engine.status); Spacer(); Button("Abilita accesso") { engine.start(prompt: true) } }
@@ -593,6 +609,15 @@ struct PreferencesView: View {
             }
             Section("Sincronizzazione tramite cartella") {
                 Text(sync.status)
+                HStack {
+                    Button(sync.usesICloudDrive ? "iCloud Drive attivo" : "Usa iCloud Drive") {
+                        do { try sync.configureICloudDrive(); cloudError = nil }
+                        catch { cloudError = error.localizedDescription }
+                    }.disabled(sync.usesICloudDrive)
+                    if sync.usesICloudDrive { Button("Mostra database in iCloud") { if let folder = sync.folderURL { NSWorkspace.shared.activateFileViewerSelecting([folder]) } } }
+                }
+                Text("Con iCloud Drive la raccolta viene salvata in iCloud Drive/SuperSnippetto e sincronizzata automaticamente. Una copia locale resta disponibile sul Mac. Sugli altri Mac scegli la stessa opzione.").font(.caption).foregroundStyle(.secondary)
+                if let cloudError { Text(cloudError).font(.caption).foregroundStyle(.red) }
                 if let message = sync.lastError { Text(message).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
                 if let path = store.data.syncFolder { Text(path).font(.caption).textSelection(.enabled) }
                 HStack {

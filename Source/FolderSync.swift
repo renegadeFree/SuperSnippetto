@@ -109,6 +109,20 @@ final class LibraryFolderSync: ObservableObject {
     private var syncing = false
     private static let limit = 16 * 1024 * 1024
     private static let sharedName = "EspansoLocale.sync.json"
+    static var iCloudDriveRoot: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
+    }
+    var usesICloudDrive: Bool { folderURL?.standardizedFileURL == Self.iCloudDriveRoot.appendingPathComponent("SuperSnippetto", isDirectory: true).standardizedFileURL }
+
+    func configureICloudDrive(root: URL = LibraryFolderSync.iCloudDriveRoot) throws {
+        precondition(Thread.isMainThread)
+        guard root.isFileURL, (try? root.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
+            throw LibraryError.invalid("iCloud Drive non è disponibile su questo Mac. Attivalo nelle Impostazioni di Sistema, poi riprova.")
+        }
+        let folder = root.appendingPathComponent("SuperSnippetto", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try configure(folder: folder)
+    }
 
     init(store: LibraryStore, stateDirectory: URL? = nil) {
         self.store = store

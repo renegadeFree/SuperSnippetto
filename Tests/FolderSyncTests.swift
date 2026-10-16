@@ -32,6 +32,7 @@ struct FolderSyncTests {
         check(Thread.isMainThread, "CLI tests execute sync on main thread")
         let root = try directory(FileManager.default.temporaryDirectory, "EspansoLocaleSyncTests-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
+        try iCloudDriveChecks(root)
 
         // First enable unions distinct content and preserves colliding UUIDs from two existing libraries.
         let (a, b, sa, sb, shared) = try makePair(root, "initial-and-causal")
@@ -261,6 +262,34 @@ struct FolderSyncTests {
         [sa, sb, restartedSync, restartedSyncA, sc, sd, se, sf].forEach { $0.stop() }
         try metadataChecks(root)
         print("Folder sync: \(checks) checks passed")
+    }
+
+    static func iCloudDriveChecks(_ root: URL) throws {
+        let cloud = try directory(root, "simulated-iCloudDrive")
+        let first = LibraryStore(url: root.appendingPathComponent("cloud-first/library.json"))
+        let original = Snippet(title: "Local snippet", content: "Local text")
+        first.data.snippets = [original]
+        first.data.snippetDefaults = SnippetDefaults(trigger: .manual)
+        let firstSync = LibraryFolderSync(store: first)
+        defer { firstSync.stop() }
+        try firstSync.configureICloudDrive(root: cloud)
+        let folder = cloud.appendingPathComponent("SuperSnippetto", isDirectory: true)
+        check(firstSync.folderURL == folder && first.data.syncFolder == folder.path, "iCloud shortcut configures its dedicated folder")
+        check(FileManager.default.fileExists(atPath: sharedFile(folder).path), "iCloud shortcut writes snippet database")
+        check(first.data.snippets == [original], "iCloud setup retains existing snippets")
+        try firstSync.configureICloudDrive(root: cloud)
+        check(first.data.snippets == [original], "iCloud setup is idempotent")
+        let second = LibraryStore(url: root.appendingPathComponent("cloud-second/library.json"))
+        let secondSync = LibraryFolderSync(store: second)
+        defer { secondSync.stop() }
+        try secondSync.configureICloudDrive(root: cloud)
+        check(second.data.snippets == [original], "another library reads the shared iCloud database")
+        check(second.data.snippetDefaults == nil && first.data.snippetDefaults?.trigger == .manual, "creation defaults remain local to each Mac")
+        let before = first.data
+        rejects("missing iCloud root") { try firstSync.configureICloudDrive(root: root.appendingPathComponent("unavailable-cloud")) }
+        check(first.data == before, "unavailable iCloud never changes library settings")
+        try firstSync.configure(folder: nil)
+        check(FileManager.default.fileExists(atPath: sharedFile(folder).path) && first.data.snippets == [original], "disabling sync retains local and cloud copies")
     }
 
     static func metadataChecks(_ root: URL) throws {
