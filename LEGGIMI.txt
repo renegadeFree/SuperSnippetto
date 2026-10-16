@@ -1,4 +1,4 @@
-SUPERSNIPPETTO 0.3.2
+SUPERSNIPPETTO 0.3.3
 Implementazione macOS indipendente di un espansore di testo.
 La ricostruzione integrale di aText resta incompleta: Verifica.txt e
 Analisi/Copertura.csv descrivono puntualmente lo stato.
@@ -16,6 +16,16 @@ Riavvia se macOS lo richiede e premi Riprova. I consensi non sono aggirati.
 Usa una tua abbreviazione in TextEdit per il collaudo dell’espansione.
 Nelle installazioni nuove gli esempi iniziali sono ;oggi e ;firma; se li hai
 modificati, usa la tua abbreviazione corrente. Gli snippet esistenti restano.
+
+RICERCA RAPIDA
+La combinazione predefinita è ⌃⌥Spazio. In Impostazioni > Ricerca rapida
+scegli Modifica, poi premi la combinazione desiderata con almeno ⌘, ⌥ o ⌃.
+Esc annulla la registrazione; i conflitti vengono segnalati prima del salvataggio.
+Ripristina riporta a ⌃⌥Spazio. La scelta viene conservata dopo il riavvio e
+resta locale al Mac. Un clic fuori dal pannello (anche in altre app o sul
+desktop), il passaggio a un’altra app o Esc chiudono la ricerca.
+La ricerca non richiede i permessi di espansione; l’inserimento nelle altre
+app continua a richiedere i normali consensi macOS.
 
 MODULI
 Nella tua libreria è presente un esempio disattivato “Demo modulo (anteprima)”.
@@ -98,5 +108,5 @@ Import unisce i dati senza sostituire silenziosamente elementi differenti.
 Le macro specifiche di TextExpander non sono convertite; .atext è parziale.
 Vedi Analisi/Importazione-aText.json per evidenze e limiti della conversione.
 ./build.sh ricompila e firma localmente con i Command Line Tools Apple.
-./test.sh esegue i 564 controlli; non simula input né abilita permessi di sistema.
+./test.sh esegue i 586 controlli; non simula input né abilita permessi di sistema.
 Source/ contiene il codice, Tests/ i controlli, Analisi/ le evidenze e copertura.

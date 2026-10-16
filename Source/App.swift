@@ -20,6 +20,50 @@ extension AppScope {
     var label: String { switch self { case .all: return "Tutte le app"; case .only: return "Solo queste app"; case .except: return "Tutte tranne queste app" } }
 }
 
+extension SearchHotkey {
+    var label: String {
+        let special = [36: "Invio", 48: "Tab", 49: "Spazio", 51: "⌫", 117: "⌦", 123: "←", 124: "→", 125: "↓", 126: "↑"]
+        var key = special[keyCode] ?? "tasto \(keyCode)"
+        if special[keyCode] == nil, let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+           let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) {
+            let data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue()
+            let layout = UnsafeRawPointer(CFDataGetBytePtr(data)).assumingMemoryBound(to: UCKeyboardLayout.self)
+            var dead: UInt32 = 0; var length = 0; var characters = [UniChar](repeating: 0, count: 8)
+            if UCKeyTranslate(layout, UInt16(keyCode), UInt16(kUCKeyActionDisplay), 0, UInt32(LMGetKbdType()), UInt32(kUCKeyTranslateNoDeadKeysBit), &dead, characters.count, &length, &characters) == noErr, length > 0 {
+                let translated = String(utf16CodeUnits: characters, count: length)
+                if !translated.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) || (0xF700...0xF8FF).contains($0.value) }) { key = translated.uppercased() }
+            }
+        }
+        return (modifiers & UInt32(controlKey) != 0 ? "⌃" : "") + (modifiers & UInt32(optionKey) != 0 ? "⌥" : "") + (modifiers & UInt32(shiftKey) != 0 ? "⇧" : "") + (modifiers & UInt32(cmdKey) != 0 ? "⌘" : "") + key
+    }
+}
+
+final class QuickSearchPanel: NSPanel {
+    private var localClick: Any?
+    private var globalClick: Any?
+    private var deactivationObserver: NSObjectProtocol?
+    init() {
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 560, height: 440), styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        title = "Cerca e inserisci"; level = .floating; isReleasedWhenClosed = false
+        let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        localClick = NSEvent.addLocalMonitorForEvents(matching: clicks) { [weak self] event in
+            if let self, self.isVisible, event.window !== self { self.orderOut(nil) }
+            return event
+        }
+        globalClick = NSEvent.addGlobalMonitorForEvents(matching: clicks) { [weak self] _ in
+            if self?.isVisible == true { self?.orderOut(nil) }
+        }
+        deactivationObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.orderOut(nil) }
+    }
+    override func resignKey() { super.resignKey(); orderOut(nil) }
+    override func cancelOperation(_ sender: Any?) { orderOut(sender) }
+    deinit {
+        if let localClick { NSEvent.removeMonitor(localClick) }
+        if let globalClick { NSEvent.removeMonitor(globalClick) }
+        if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
+    }
+}
+
 final class DesktopDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -53,9 +97,7 @@ final class DesktopController: ObservableObject {
     }
     func showQuickSearch() {
         if quickPanel == nil {
-            let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 560, height: 440), styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
-            panel.title = "Cerca e inserisci"; panel.level = .floating; panel.isReleasedWhenClosed = false
-            quickPanel = panel
+            quickPanel = QuickSearchPanel()
         }
         quickPanel?.contentView = NSHostingView(rootView: QuickSearchView(store: store) { [weak self] snippet in
             self?.quickPanel?.orderOut(nil)
@@ -166,7 +208,7 @@ struct MenuContent: View {
     var body: some View {
         Text(engine.status)
         Toggle("Espansione attiva", isOn: Binding(get: { !store.data.paused }, set: { store.data.paused = !$0; if $0 { engine.start() } }))
-        Button("Cerca e inserisci…", action: controller.showQuickSearch).keyboardShortcut(" ", modifiers: [.control, .option])
+        Button("Cerca e inserisci… (\(store.data.effectiveSearchHotkey.label))", action: controller.showQuickSearch)
         Button("Apri libreria") { openWindow(id: "library"); NSApp.activate(ignoringOtherApps: true) }
         Divider()
         ForEach(store.data.snippets.filter { $0.enabled }.prefix(18)) { snippet in
@@ -422,19 +464,16 @@ struct SnippetEditor: View {
                 }
             }.padding(24)
         }.sheet(isPresented: $capturingHotkey) {
-            VStack(spacing: 18) {
-                Text("Premi la combinazione di tasti").font(.headline)
-                Text("Usa almeno ⌘, ⌥ o ⌃. Esc annulla. ⌃⌥Spazio è riservata alla ricerca.").font(.caption).foregroundStyle(.secondary)
-                HotkeyRecorder { code, modifiers in snippet.hotkeyCode = code; snippet.hotkeyModifiers = modifiers; capturingHotkey = false }.frame(width: 400, height: 60)
-                Button("Annulla") { capturingHotkey = false }.keyboardShortcut(.cancelAction)
-            }.padding(28)
+            HotkeyCaptureSheet(engine: engine, title: "Scorciatoia del frammento") { shortcut in
+                guard shortcut != engine.searchHotkey else { throw LibraryError.invalid("\(shortcut.label) è riservata alla ricerca. Puoi cambiarla nelle impostazioni.") }
+                snippet.hotkeyCode = shortcut.keyCode; snippet.hotkeyModifiers = shortcut.modifiers
+            }
         }
     }
     private var preview: String { (try? TemplateRenderer().render(snippet.content, context: RenderContext(clipboard: "[appunti al momento dell’inserimento]", selection: "[selezione nell’app di destinazione]")))?.text ?? "Contenuto non valido: controlla le variabili." }
     private var hotkeyLabel: String {
         guard let code = snippet.hotkeyCode else { return "Registra…" }
-        let m = snippet.hotkeyModifiers
-        return ((m & UInt32(controlKey)) != 0 ? "⌃" : "") + ((m & UInt32(optionKey)) != 0 ? "⌥" : "") + ((m & UInt32(shiftKey)) != 0 ? "⇧" : "") + ((m & UInt32(cmdKey)) != 0 ? "⌘" : "") + " tasto \(code)"
+        return SearchHotkey(keyCode: code, modifiers: snippet.hotkeyModifiers).label
     }
     private func changeKind(_ kind: SnippetKind) {
         let oldRich = snippet.kind == .rich || snippet.kind == .html
@@ -485,21 +524,57 @@ struct RichEditor: NSViewRepresentable {
 }
 
 struct HotkeyRecorder: NSViewRepresentable {
-    let onRecord: (Int, UInt32) -> Void
-    func makeNSView(context: Context) -> RecorderView { let view = RecorderView(); view.onRecord = onRecord; DispatchQueue.main.async { view.window?.makeFirstResponder(view) }; return view }
-    func updateNSView(_ nsView: RecorderView, context: Context) {}
+    let onRecord: (SearchHotkey) -> Void
+    let onCancel: () -> Void
+    func makeNSView(context: Context) -> RecorderView { let view = RecorderView(); view.onRecord = onRecord; view.onCancel = onCancel; return view }
+    func updateNSView(_ nsView: RecorderView, context: Context) { nsView.onRecord = onRecord; nsView.onCancel = onCancel }
     class RecorderView: NSView {
-        var onRecord: ((Int, UInt32) -> Void)?
+        var onRecord: ((SearchHotkey) -> Void)?
+        var onCancel: (() -> Void)?
         override var acceptsFirstResponder: Bool { true }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let window = self.window else { return }
+                window.makeFirstResponder(self)
+            }
+        }
+        override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self) }
+        override func performKeyEquivalent(with event: NSEvent) -> Bool {
+            guard window?.firstResponder === self, !event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return super.performKeyEquivalent(with: event) }
+            keyDown(with: event); return true
+        }
         override func keyDown(with event: NSEvent) {
+            if event.keyCode == 53 { onCancel?(); return }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             guard !flags.intersection([.command, .option, .control]).isEmpty else { NSSound.beep(); return }
             var modifiers: UInt32 = 0
             if flags.contains(.command) { modifiers |= UInt32(cmdKey) }; if flags.contains(.option) { modifiers |= UInt32(optionKey) }; if flags.contains(.control) { modifiers |= UInt32(controlKey) }; if flags.contains(.shift) { modifiers |= UInt32(shiftKey) }
-            guard !(event.keyCode == 49 && modifiers == UInt32(controlKey | optionKey)) else { NSSound.beep(); return }
-            onRecord?(Int(event.keyCode), modifiers)
+            onRecord?(SearchHotkey(keyCode: Int(event.keyCode), modifiers: modifiers))
         }
-        override func draw(_ dirtyRect: NSRect) { super.draw(dirtyRect); let str = "La prossima combinazione verrà assegnata al frammento"; (str as NSString).draw(at: NSPoint(x: 10, y: 22), withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.secondaryLabelColor]) }
+        override func draw(_ dirtyRect: NSRect) { super.draw(dirtyRect); ("Premi la nuova combinazione…" as NSString).draw(at: NSPoint(x: 10, y: 22), withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.secondaryLabelColor]) }
+    }
+}
+
+struct HotkeyCaptureSheet: View {
+    @ObservedObject var engine: ExpansionEngine
+    let title: String
+    let onRecord: (SearchHotkey) throws -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var message: String?
+    var body: some View {
+        VStack(spacing: 18) {
+            Text(title).font(.headline)
+            Text("Usa almeno ⌘, ⌥ o ⌃. Esc annulla.").font(.caption).foregroundStyle(.secondary)
+            HotkeyRecorder(onRecord: { shortcut in
+                do { try onRecord(shortcut); dismiss() }
+                catch { message = error.localizedDescription }
+            }, onCancel: { dismiss() }).frame(width: 420, height: 60)
+            if let message { Text(message).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+            Button("Annulla") { dismiss() }.keyboardShortcut(.cancelAction)
+        }.padding(28).frame(width: 480)
+            .onAppear { engine.recordingHotkey = true }
+            .onDisappear { engine.recordingHotkey = false }
     }
 }
 
@@ -514,7 +589,7 @@ struct QuickSearchView: View {
         VStack {
             TextField("Cerca un frammento…", text: $query).textFieldStyle(.roundedBorder).focused($focused).onSubmit { choose() }
             List(selection: $selected) { ForEach(matches) { snippet in HStack { VStack(alignment: .leading) { Text(snippet.title); Text(snippet.abbreviation).font(.caption).foregroundStyle(.secondary) }; Spacer(); Button("Inserisci") { insert(snippet) } }.tag(snippet.id) } }
-            HStack { Text("⌃⌥Spazio · Invio inserisce la selezione").font(.caption).foregroundStyle(.secondary); Spacer(); Button("Inserisci", action: choose).disabled(matches.isEmpty) }
+            HStack { Text("\(store.data.effectiveSearchHotkey.label) · Invio inserisce · Esc chiude").font(.caption).foregroundStyle(.secondary); Spacer(); Button("Inserisci", action: choose).disabled(matches.isEmpty) }
         }.padding(15).onAppear { DispatchQueue.main.async { focused = true }; selected = matches.first?.id }.onChange(of: query) { _ in selected = matches.first?.id }
     }
     private func choose() { if let snippet = matches.first(where: { $0.id == selected }) ?? matches.first { insert(snippet) } }
@@ -526,8 +601,22 @@ struct PreferencesView: View {
     @ObservedObject var controller: DesktopController
     @ObservedObject var sync: LibraryFolderSync
     @State private var loginError: String?
+    @State private var capturingSearchHotkey = false
+    @State private var searchHotkeyError: String?
     var body: some View {
         Form {
+            Section("Ricerca rapida") {
+                HStack {
+                    Text("Scorciatoia globale")
+                    Button("Modifica… (\(store.data.effectiveSearchHotkey.label))") { capturingSearchHotkey = true }
+                    Button("Ripristina ⌃⌥Spazio") {
+                        do { try engine.setSearchHotkey(.standard); searchHotkeyError = nil }
+                        catch { searchHotkeyError = error.localizedDescription }
+                    }
+                }
+                Text("Premi la scorciatoia da qualsiasi app. Un clic fuori dalla ricerca la chiude; Esc la chiude dalla tastiera.").font(.caption).foregroundStyle(.secondary)
+                if let searchHotkeyError { Text(searchHotkeyError).font(.caption).foregroundStyle(.red) }
+            }
             Section("Espansione") {
                 Toggle("Sospendi tutte le espansioni", isOn: $store.data.paused)
                 TextField("Separatori", text: Binding(get: { store.data.delimiters.replacingOccurrences(of: "\t", with: "\\t").replacingOccurrences(of: "\n", with: "\\n") }, set: { store.data.delimiters = $0.replacingOccurrences(of: "\\t", with: "\t").replacingOccurrences(of: "\\n", with: "\n") }))
@@ -568,7 +657,9 @@ struct PreferencesView: View {
                 }
                 Text("Scegli una cartella replicata dal tuo provider sugli altri Mac. I conflitti conservano entrambe le versioni. Sono condivisi raccolte, frammenti e cestino; le impostazioni e i permessi degli script rimangono locali. Il formato è di SuperSnippetto.").font(.caption).foregroundStyle(.secondary)
             }
-        }.formStyle(.grouped).padding()
+        }.formStyle(.grouped).padding().sheet(isPresented: $capturingSearchHotkey) {
+            HotkeyCaptureSheet(engine: engine, title: "Scorciatoia della ricerca rapida", onRecord: engine.setSearchHotkey)
+        }
     }
 }
 
@@ -672,7 +763,7 @@ struct HelpView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("Crea un frammento e assegnagli un’abbreviazione come ;firma. Concedi Accessibilità e Monitoraggio input nelle impostazioni di macOS, poi riavvia l’app se richiesto. Digita l’abbreviazione in TextEdit per provarla.")
-                    Text("La ricerca rapida si apre con Ctrl–Option–Spazio o dal menu nella barra di macOS. Seleziona un frammento per inserirlo nell’ultima app usata. Le app escluse e le raccolte disattivate vengono rispettate anche nell’inserimento manuale.")
+                    Text("La ricerca rapida si apre con Ctrl–Option–Spazio o dal menu nella barra di macOS. Puoi cambiare la scorciatoia in Impostazioni > Ricerca rapida. Un clic fuori dalla finestra o Esc la chiude. Seleziona un frammento per inserirlo nell’ultima app usata. Le app escluse e le raccolte disattivate vengono rispettate anche nell’inserimento manuale.")
                     Text("Variabili").font(.title2.bold())
                     Text("{{date:dd/MM/yyyy}} · data con formato Unicode\n{{time}} · ora locale\n{{clipboard}} · testo negli appunti\n{{selection}} · testo selezionato accessibile\n{{cursor}} · posizione finale del cursore\n{{field:Nome}} · valore da chiedere prima dell’inserimento\n{{snippet:;firma}} · contenuto di un altro frammento\n{{uuid}} · identificatore nuovo\n{{upper:testo}} · maiuscolo\n{{lower:testo}} · minuscolo\n{{title:testo}} · iniziali maiuscole").font(.system(.body, design: .monospaced)).textSelection(.enabled)
                     Text("Moduli e trasformazioni").font(.title2.bold())

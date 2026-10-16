@@ -1,5 +1,17 @@
 import Foundation
 import Combine
+import Carbon
+
+struct SearchHotkey: Codable, Equatable {
+    var keyCode: Int
+    var modifiers: UInt32
+    static let standard = SearchHotkey(keyCode: 49, modifiers: UInt32(controlKey | optionKey))
+    var isValid: Bool {
+        (0...127).contains(keyCode) && keyCode != 53 &&
+        modifiers & UInt32(cmdKey | optionKey | controlKey) != 0 &&
+        modifiers & ~UInt32(cmdKey | optionKey | controlKey | shiftKey) == 0
+    }
+}
 
 enum SnippetKind: String, Codable, CaseIterable { case plain, rich, html, image, shell, appleScript, javascript }
 enum TriggerMode: String, Codable, CaseIterable { case immediate, delimiterKeep, delimiterDiscard, manual }
@@ -66,6 +78,11 @@ struct LibraryData: Codable, Equatable {
     var backupIntervalMinutes: Int? = nil
     var backupRetention: Int? = nil
     var backupFolder: String? = nil
+    var searchHotkey: SearchHotkey? = nil
+    var effectiveSearchHotkey: SearchHotkey { searchHotkey ?? .standard }
+    func searchHotkeyConflict(_ hotkey: SearchHotkey) -> Bool {
+        snippets.contains { $0.hotkeyCode == hotkey.keyCode && $0.hotkeyModifiers == hotkey.modifiers }
+    }
 }
 
 enum LibraryError: LocalizedError {
@@ -428,6 +445,7 @@ final class LibraryStore: ObservableObject {
     }
 
     private static func validate(_ library: LibraryData) throws {
+        guard library.effectiveSearchHotkey.isValid else { throw LibraryError.invalid("Scorciatoia di ricerca non valida: usa almeno ⌘, ⌥ o ⌃, senza Esc.") }
         guard library.syncFolder == nil || (library.syncFolder!.utf8.count <= 8192 && (library.syncFolder! as NSString).expandingTildeInPath.hasPrefix("/")) else { throw LibraryError.invalid("La cartella di sincronizzazione deve avere un percorso assoluto.") }
         guard (1...525_600).contains(library.backupIntervalMinutes ?? 1440),
               (1...10_000).contains(library.backupRetention ?? 100),

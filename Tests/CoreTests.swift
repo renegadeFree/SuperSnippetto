@@ -120,7 +120,35 @@ struct CoreTests {
         try persistenceChecks(root: root)
         try aliasChecks(root: root)
         try importWarningChecks(root: root)
+        try searchHotkeyChecks(root: root)
         print("CoreTests: \(checks) checks passed")
+    }
+
+    static func searchHotkeyChecks(root: URL) throws {
+        let store = LibraryStore(url: root.appendingPathComponent("hotkey/library.json"))
+        check(store.data.effectiveSearchHotkey == .standard, "existing library uses standard search shortcut")
+        check(SearchHotkey.standard.isValid, "standard search shortcut is valid")
+        let custom = SearchHotkey(keyCode: 1, modifiers: 4352) // Control + Command + S
+        check(custom.isValid, "custom search shortcut is valid")
+        check(!SearchHotkey(keyCode: 1, modifiers: 0).isValid, "plain keys cannot become a global shortcut")
+        check(!SearchHotkey(keyCode: 1, modifiers: 512).isValid, "shift alone cannot become a global shortcut")
+        check(!SearchHotkey(keyCode: 53, modifiers: 256).isValid, "escape stays available to cancel recording")
+        check(!SearchHotkey(keyCode: 128, modifiers: 256).isValid, "invalid key code rejected")
+        check(!SearchHotkey(keyCode: 1, modifiers: 257).isValid, "unknown modifier bits rejected")
+        store.data.searchHotkey = custom
+        try store.save()
+        check(LibraryStore(url: store.fileURL).data.effectiveSearchHotkey == custom, "custom shortcut survives restart")
+        store.data.snippets = [Snippet(hotkeyCode: custom.keyCode, hotkeyModifiers: custom.modifiers)]
+        check(store.data.searchHotkeyConflict(custom), "snippet shortcut collision detected")
+        store.data.snippets[0].enabled = false
+        check(store.data.searchHotkeyConflict(custom), "disabled snippet still reserves its shortcut")
+        check(!store.data.searchHotkeyConflict(.standard), "former search shortcut becomes available")
+        store.data.searchHotkey = SearchHotkey(keyCode: -1, modifiers: 0)
+        rejects("invalid shortcut is never saved") { try store.save() }
+        check(LibraryStore(url: store.fileURL).data.effectiveSearchHotkey == custom, "rejected save preserves previous shortcut")
+        store.data.searchHotkey = nil; store.data.snippets = []
+        try store.save()
+        check(LibraryStore(url: store.fileURL).data.effectiveSearchHotkey == .standard, "library without new preference decodes with original default")
     }
 
     static func persistenceChecks(root: URL) throws {

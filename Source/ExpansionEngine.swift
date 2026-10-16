@@ -51,6 +51,8 @@ final class ExpansionEngine: ObservableObject {
     private var hotkeyHandler: EventHandlerRef?
     private var hotkeyReferences: [EventHotKeyRef] = []
     private var hotkeySnippets: [UInt32: UUID] = [:]
+    var recordingHotkey = false { didSet { refreshHotkeys() } }
+    var searchHotkey: SearchHotkey { store.data.effectiveSearchHotkey }
     private var busy = false
     private var pasteboardRestoration: DispatchWorkItem?
     private let scriptQueue = DispatchQueue(label: "local.espanso.scripts", qos: .userInitiated)
@@ -77,7 +79,8 @@ final class ExpansionEngine: ObservableObject {
     }
 
     func start(prompt: Bool = false) {
-        guard !running else { refreshHotkeys(); return }
+        refreshHotkeys()
+        guard !running else { return }
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: prompt] as CFDictionary
         let accessibility = AXIsProcessTrustedWithOptions(options)
         var listening = CGPreflightListenEventAccess()
@@ -203,7 +206,7 @@ final class ExpansionEngine: ObservableObject {
 
     fileprivate func triggerHotkey(_ identifier: UInt32) {
         if identifier == 0 {
-            guard running, !busy, !IsSecureEventInputEnabled() else { return }
+            guard !recordingHotkey, !busy, !IsSecureEventInputEnabled() else { return }
             rememberExternalApplication()
             onShowSearch?()
             return
@@ -216,17 +219,36 @@ final class ExpansionEngine: ObservableObject {
         for reference in hotkeyReferences { UnregisterEventHotKey(reference) }
         hotkeyReferences.removeAll()
         hotkeySnippets.removeAll()
-        guard running else { return }
+        guard !recordingHotkey else { return }
         if hotkeyHandler == nil {
             var event = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
             let result = InstallEventHandler(GetApplicationEventTarget(), expansionHotKeyCallback, 1, &event, Unmanaged.passUnretained(self).toOpaque(), &hotkeyHandler)
             if result != noErr { onError?("Registrazione scorciatoie non disponibile (\(result))."); return }
         }
         var searchReference: EventHotKeyRef?
-        let searchResult = RegisterEventHotKey(49, UInt32(controlKey | optionKey), EventHotKeyID(signature: hotKeySignature, id: 0), GetApplicationEventTarget(), 0, &searchReference)
+        let shortcut = searchHotkey
+        guard shortcut.isValid else { onError?("Scorciatoia di ricerca non valida."); return }
+        let searchResult = RegisterEventHotKey(UInt32(shortcut.keyCode), shortcut.modifiers, EventHotKeyID(signature: hotKeySignature, id: 0), GetApplicationEventTarget(), 0, &searchReference)
         if searchResult == noErr, let searchReference { hotkeyReferences.append(searchReference) }
-        else { onError?("La scorciatoia Ctrl+Option+Spazio è già in uso.") }
-        registerLibraryHotkeys()
+        else { onError?("La scorciatoia di ricerca è già in uso o non disponibile (\(searchResult)). Scegline un’altra nelle impostazioni.") }
+        if running { registerLibraryHotkeys() }
+    }
+
+    func setSearchHotkey(_ shortcut: SearchHotkey) throws {
+        guard shortcut.isValid else { throw LibraryError.invalid("Usa almeno ⌘, ⌥ o ⌃, senza Esc.") }
+        guard !store.data.searchHotkeyConflict(shortcut) else { throw LibraryError.invalid("Questa combinazione è già assegnata a un frammento. Scegline un’altra.") }
+        // Probe before changing the saved preference; recording temporarily releases our hotkeys.
+        if shortcut != searchHotkey || recordingHotkey {
+            var probe: EventHotKeyRef?
+            let result = RegisterEventHotKey(UInt32(shortcut.keyCode), shortcut.modifiers, EventHotKeyID(signature: hotKeySignature, id: UInt32.max), GetApplicationEventTarget(), 0, &probe)
+            guard result == noErr, let probe else { throw LibraryError.invalid("Combinazione già in uso da macOS o da un’altra app (\(result)). Scegline un’altra.") }
+            UnregisterEventHotKey(probe)
+        }
+        let previous = store.data.searchHotkey
+        store.data.searchHotkey = shortcut
+        do { try store.save() }
+        catch { store.data.searchHotkey = previous; throw error }
+        refreshHotkeys()
     }
 
     private func registerHotkey(snippetID: UUID, keyCode: UInt32, modifiers: UInt32) {
@@ -440,6 +462,10 @@ final class ExpansionEngine: ObservableObject {
     private func registerLibraryHotkeys() {
         for snippet in store.data.snippets where snippet.enabled {
             guard let keyCode = snippet.hotkeyCode, (0...127).contains(keyCode) else { continue }
+            if keyCode == searchHotkey.keyCode && snippet.hotkeyModifiers == searchHotkey.modifiers {
+                onError?("Una scorciatoia di frammento coincide con quella della ricerca: modifica una delle due nelle impostazioni.")
+                continue
+            }
             registerHotkey(snippetID: snippet.id, keyCode: UInt32(keyCode), modifiers: snippet.hotkeyModifiers)
         }
     }
@@ -681,7 +707,38 @@ private enum EngineSelfTest {
         let start = Date()
         expectFailure { _ = try LocalScriptRunner.run(code: "sleep 10", kind: .shell) }
         assert(Date().timeIntervalSince(start) < 7)
-        print("Engine: 5 script/output/timeout checks passed")
+        try searchHotkeyChecks()
+        print("Engine: 12 script/output/timeout and native hotkey checks passed")
+    }
+
+    static func searchHotkeyChecks() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SuperSnippettoHotkey-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = LibraryStore(url: root.appendingPathComponent("library.json"))
+        let engine = ExpansionEngine(store: store)
+        engine.recordingHotkey = true
+        let shortcut = SearchHotkey(keyCode: 80, modifiers: UInt32(controlKey | optionKey | cmdKey | shiftKey))
+        var occupied: EventHotKeyRef?
+        let result = RegisterEventHotKey(UInt32(shortcut.keyCode), shortcut.modifiers, EventHotKeyID(signature: 0x54455354, id: 1), GetApplicationEventTarget(), 0, &occupied)
+        guard result == noErr, let occupied else { fatalError("Native test shortcut unavailable: \(result)") }
+        do { try engine.setSearchHotkey(shortcut); fatalError("Occupied shortcut accepted") } catch { }
+        assert(store.data.searchHotkey == nil)
+        UnregisterEventHotKey(occupied)
+        try engine.setSearchHotkey(shortcut)
+        assert(LibraryStore(url: store.fileURL).data.searchHotkey == shortcut)
+        engine.recordingHotkey = false
+        var opened = 0
+        engine.onShowSearch = { opened += 1 }
+        var event: EventRef?
+        guard CreateEvent(nil, OSType(kEventClassKeyboard), UInt32(kEventHotKeyPressed), 0, 0, &event) == noErr, let event else { fatalError("Cannot create test Carbon message") }
+        defer { ReleaseEvent(event) }
+        var id = EventHotKeyID(signature: hotKeySignature, id: 0)
+        assert(SetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), MemoryLayout<EventHotKeyID>.size, &id) == noErr)
+        assert(SendEventToEventTarget(event, GetApplicationEventTarget()) == noErr)
+        assert(opened == 1)
+        engine.recordingHotkey = true
+        engine.triggerHotkey(0)
+        assert(opened == 1)
     }
 }
 #endif

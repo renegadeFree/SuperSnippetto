@@ -1,3 +1,26 @@
+AGGIORNAMENTO 0.3.3 — RICERCA RAPIDA
+Scorciatoia globale persistente configurabile nelle impostazioni, controllo
+collisioni con frammenti e registrazioni Carbon, ripristino del valore originale.
+Il registratore sospende temporaneamente le scorciatoie dell’app e prende
+il focus quando il pannello è effettivamente collegato alla finestra.
+Il pannello di ricerca si chiude su mouse-down esterno locale/globale,
+perdita della finestra chiave, disattivazione dell’app o Esc; il clic passa oltre.
+586 controlli: Core121, template39, engine12, automazione23, sync94,
+LZ4frame109, aTextImport56, aTextMacro70, legacy62.
+I test Carbon usano un messaggio interno di test e una combinazione temporanea;
+non simulano tasti né inseriscono testo nelle altre app.
+
+Interfaccia installata: registrazione ⇧⌘J e ⌃⌥K, persistenza dopo chiusura e
+riavvio, ripristino ⌃⌥Spazio e chiusura della ricerca con Esc verificati.
+148 frammenti, 3 elementi nel cestino e ogni altro dato/impostazione invariati;
+verificato confronto del documento, esclusa la sola nuova preferenza hotkey.
+Build installata e build distribuita identiche, firma ad hoc valida.
+Limite del collaudo UI automatico: i comandi diretti alle finestre non hanno
+confermato l'attivazione Carbon globale né la chiusura su clic fisico in altre
+app/desktop. Queste due interazioni richiedono una prova con mouse/tastiera
+reali. I relativi percorsi nativi sono implementati; non si afferma di aver
+simulato con successo un input hardware globale.
+
 AGGIORNAMENTO 0.3.2 — IMPORTAZIONE ATEXT
 
 Corretto il riconoscimento dei JSON aText a elenco numerico e dei vecchi
