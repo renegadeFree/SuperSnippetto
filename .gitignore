@@ -1,0 +1,15 @@
+.DS_Store
+*.app/
+*.zip
+*.zip.sha256
+*.dSYM/
+.build/
+DerivedData/
+work/
+.env
+.env.*
+!.env.example
+SHA256.txt
+# Local reverse-engineering evidence and machine-specific audit reports.
+Analisi/
+Verifica.txt

@@ -1,0 +1,39 @@
+{
+  "format": "EspansoLocale",
+  "version": 1,
+  "data": {
+    "groups": [
+      {
+        "id": "8B5C78E2-2E17-481E-B836-91D3F2E6D013",
+        "name": "Esempi moduli",
+        "enabled": true
+      }
+    ],
+    "snippets": [
+      {
+        "id": "197A6E00-09C5-4593-A92F-5590D472E6A4",
+        "title": "Esempio modulo con condizioni",
+        "abbreviation": ";modulo",
+        "groupID": "8B5C78E2-2E17-481E-B836-91D3F2E6D013",
+        "content": "Nome: {{field:Nome|Mario}}\nTipo: {{choice:Tipo|Privato|Azienda}}\n{{check:Extra|includi dettagli|nessun dettaglio}}\n{{if:Extra|Dettagli: {{field:Dettagli}}|Senza dettagli}}\nNote: {{multiline:Note}}\nScadenza: {{datefield:Scadenza|dd/MM/yyyy}}",
+        "kind": "plain",
+        "trigger": "manual",
+        "caseSensitive": false,
+        "wholeWord": true,
+        "adaptCase": false,
+        "enabled": false,
+        "appScope": "all",
+        "apps": [],
+        "hotkeyModifiers": 0,
+        "notes": "Usa Anteprima con campi per provare il modulo. Attiva e assegna un trigger se desideri inserirlo nelle altre app.",
+        "useCount": 0
+      }
+    ],
+    "excludedApps": [],
+    "delimiters": " \t\n.,;:!?()[]{}",
+    "paused": false,
+    "allowScripts": false,
+    "launchAtLogin": false,
+    "trash": []
+  }
+}

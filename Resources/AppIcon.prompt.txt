@@ -1,0 +1,5 @@
+Created with the built-in image_gen tool on 2026-10-16. Original generated icon.
+
+Use case: logo-brand. Asset type: final macOS application icon for a text expansion utility named SuperSnippetto. Create ONE polished original 1024x1024 square app icon, centered with generous optical margin, transparent exterior corners. A premium rounded-square tile with an electric indigo-to-violet subtly luminous surface, containing a crisp white stylized text snippet/card with two short text lines and a distinctive small warm yellow lightning bolt overlapping its lower right, conveying instant reusable text. Modern native macOS dimensional icon, restrained soft depth and precise silhouettes, excellent legibility at 32px and 16px, no excessive detail. No letters or words, no application title written on icon, no watermark, no mockup presentation or contact sheet, no existing company logos. Deliver the icon itself with genuine transparent background around the tile.
+
+Resources/AppIcon.png is the generated master. make-icon.sh uses macOS sips and iconutil to package native icon sizes without changing the design.

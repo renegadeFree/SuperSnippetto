@@ -1,0 +1,38 @@
+COLLAUDO SUPERSNIPPETTO 0.3.1 — 16 ottobre 2026
+
+Build arm64 macOS13+, Swift6.3.3 in modalità Swift5, -O: riuscita.
+Rinomina0.3.1: nome/bundle/eseguibile SuperSnippetto e icona originale ICNS.
+Avvio e Informazioni: nome, icona e versione0.3.1(4) verificati. Libreria
+esistente invariata byte per byte (SHA256 prima/dopo);4 frammenti preservati.
+I502 controlli sono stati rieseguiti dopo la rinomina: tutti passati.
+
+Firma ad hoc locale: codesign --verify --deep --strict.
+
+CoreTests:106; TemplateTests:39; Engine:5; Automation:23;
+FolderSync:94; LZ4Frame:109; ATextImport:56; ATextMacro:70.
+Totale:502 controlli passati. ./test.sh usa dati temporanei e nessun input
+nelle app. Il servizio NSFileCoordinator richiede esecuzione locale fuori dal
+sandbox dello strumento; il controllo automatico l'ha approvata. Nessun TCC
+concesso. Ultima modifica alla UI asincrona verificata con build e collaudo UI.
+
+Corpus esterno (non distribuito):6 frame corretti byte-identici a liblz4.
+5 archivi importati tramite LibraryStore:5 gruppi,159 snippet, tutti manuali e
+disattivati per regole originali non rappresentate;169 avvisi. Examples UUID
+duplicato e Quickstart1 checksum errato rifiutati senza mutare lo store.
+
+UI0.3: importazione del solo campione originale distribuito, avviso di modalità
+manuale, reimportazione senza duplicati, ricerca alias e pannello alias; Nome
+con default e Note multilinea, risultato d'anteprima con data corretta. Ritorno
+alla libreria verificato. I tre snippet precedenti e \oggi sono conservati.
+Un loop modale rientrante nell'azione del pulsante è stato corretto differendo
+l'anteprima; il campione finale ha aperto/chiuso i dialoghi normalmente.
+
+UI0.2 già verificata: modulo con menu/checkbox/ramo condizionale, backup manuale,
+cestino vuoto, impostazioni backup/sync. Nessun ripristino della libreria
+personale. Le API AppleScript hanno23 controlli in-process e dizionario XML
+valido; esempi compilati con osacompile, nessuna esecuzione esterna verificata.
+
+Non collaudati espansione globale, hotkey, inserimento rich/immagini/cursore,
+IME o provider sync fra due Mac fisici. L'app mostra ancora i permessi macOS
+mancanti, che l'utente ha scelto di concedere personalmente.
+La ricostruzione integrale resta incompleta: vedere Verifica.txt.

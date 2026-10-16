@@ -1,0 +1,98 @@
+SUPERSNIPPETTO 0.3.1
+Implementazione macOS indipendente di un espansore di testo.
+La ricostruzione integrale di aText resta incompleta: Verifica.txt e
+Analisi/Copertura.csv descrivono puntualmente lo stato.
+
+RINOMINA
+L'app ora si chiama SuperSnippetto, con icona originale e bundle
+it.local.SuperSnippetto. La cartella dati EspansoLocale e gli identificatori
+interni dei formati restano compatibili per conservare i dati esistenti.
+
+AVVIO
+Apri “SuperSnippetto.app”. Build Apple Silicon/macOS13+.
+Scegli prima la posizione definitiva dell’app, poi concedi personalmente
+Accessibilità e Monitoraggio input nelle Impostazioni di Sistema.
+Riavvia se macOS lo richiede e premi Riprova. I consensi non sono aggirati.
+Usa una tua abbreviazione in TextEdit per il collaudo dell’espansione.
+Nelle installazioni nuove gli esempi iniziali sono ;oggi e ;firma; se li hai
+modificati, usa la tua abbreviazione corrente. Gli snippet esistenti restano.
+
+MODULI
+Nella tua libreria è presente un esempio disattivato “Demo modulo (anteprima)”.
+Selezionalo e scegli Anteprima con campi per provarlo senza inserire testo
+altrove. Esempi-moduli.json può essere importato in altre installazioni.
+Per campi di testo: {{field:Nome|Mario}}, {{multiline:Note}}.
+Scelte: {{choice:Tipo|Privato|Azienda}}.
+Checkbox: {{check:Extra|sì|no}}.
+Data compilabile: {{datefield:Scadenza|dd/MM/yyyy}}.
+Condizione: {{if:Extra|Confermato|Da confermare}}.
+Riuso valore: {{var:Nome}}. I campi dipendenti possono aprire un secondo dialogo.
+
+VARIABILI E TRASFORMAZIONI
+{{date:dd/MM/yyyy}} {{time}} {{clipboard}} {{selection}} {{cursor}} {{uuid}}
+{{snippet:;firma}} {{upper:testo}} {{lower:testo}} {{title:testo}}
+{{calc:(1+2)*3}} {{trim: testo }} {{length:testo}}
+{{date:+2d|dd/MM/yyyy}} {{date:HH:mm|it_IT|Europe/Rome}}
+Offset: y=anni, M=mesi, w=settimane, d=giorni, h=ore, m=minuti, s=secondi.
+{{replace:cerca|sostituisci|testo}} {{regex:(\d+)|[$1]|a12}}
+{{urlencode:testo}} {{urldecode:testo}} {{base64:testo}} {{unbase64:testo}}
+Annidamento supportato. Per | dentro un argomento scrivi \|; per un
+backslash scrivi \\. Nei pattern regex il separatore | va quindi escapato.
+
+BACKUP E CESTINO
+File > Backup e ripristino mostra copie automatiche e manuali.
+Impostazioni: intervallo in minuti, copie da conservare, destinazione.
+Default: ogni giorno al salvataggio e 100 copie. Prima di ripristinare una
+copia viene salvata la libreria corrente, anche con modifiche in memoria.
+I frammenti rimossi vanno nel cestino recuperabile. Prima di svuotarlo viene
+creato un backup. I backup sono JSON non cifrati, da conservare con cura.
+
+SINCRONIZZAZIONE
+Impostazioni > Sincronizzazione > Scegli cartella. Sugli altri Mac scegli una
+cartella replicata dal tuo provider (iCloud Drive, Dropbox, OneDrive, rete...).
+Il provider trasferisce il file; l’app unisce frammenti, raccolte e cestino.
+Le copie in conflitto vengono mantenute; cancellazioni e restart hanno una
+cronologia persistente. Impostazioni/consensi script/conteggi d’uso restano locali.
+È un formato di SuperSnippetto: non punta a file/cartelle di sincronizzazione
+aText. Sono necessarie prove su più Mac prima di affidargli l’unica copia dei dati.
+
+APPLESCRIPT
+Esempio read-only nel file Automazione.applescript.
+Comandi: status, enable, disable, expand "abbreviazione o UUID",
+import "/percorso/raccolta.json" o lista, delete "UUID" o lista.
+delete usa il cestino; expand invia una richiesta asincrona e usa i normali
+permessi/regole. Eventuali consensi di automazione dipendono da macOS.
+
+IMPORTAZIONE ATEXT E ALIAS
+File > Importa accetta anche la variante .atext non protetta osservata.
+Gli elementi importati partono in modalità manuale. Rivedi gli avvisi:
+regole di gruppo, script e macro incompatibili disattivano gli elementi.
+Le note spiegano i limiti; “Copia dati originali” conserva il record sorgente.
+JSON/CSV, backup e sincronizzazione mantengono alias e metadati originali.
+Nel formato JSON sono presenti anche i record dei gruppi, senza duplicare
+ricorsivamente i figli. Non è una copia byte per byte dell'archivio aText.
+Tutti i Mac sincronizzati devono usare 0.3 o successiva per conservare
+questi nuovi campi: le versioni precedenti non li gestiscono.
+“Altre abbreviazioni” nell'editor permette alias, uno per riga; la ricerca
+li include. Le macro {{snippet:UUID}} possono riferirsi a snippet annidati.
+Script e immagini annidati non sono espansi da questo percorso.
+Esempio-importazione.atext è un piccolo campione originale creato per il
+collaudo, senza contenuti dell'app analizzata. È già importato come
+“Demo importazione aText”, con Nome, Note e una data. Usa Anteprima con
+campi per provarlo: non richiede Accessibilità per l'anteprima locale.
+L'importazione converte cursore, appunti correnti, alcuni campi/menu,
+riferimenti GUID e formati data comuni. I formati data localizzati di
+Foundation possono differire nei dettagli da .NET. Storico clipboard,
+parametri, allegati, trasformazioni e molte regole richiedono ancora lavoro.
+Archivi protetti o varianti sconosciute vengono rifiutati; nessuna gestione
+password o rimozione di protezioni. Export .atext non implementato.
+
+DATI E SORGENTI
+~/Library/Application Support/EspansoLocale/library.json
+JSON completo con cestino/impostazioni; CSV per elementi attivi.
+Import unisce i dati senza sostituire silenziosamente elementi differenti.
+Le macro specifiche di TextExpander non sono convertite; .atext è parziale.
+Vedi Analisi/Importazione-aText.json per evidenze e limiti della conversione.
+./build.sh ricompila e firma localmente con i Command Line Tools Apple.
+./test.sh esegue i 502 controlli; non simula input né abilita permessi di sistema.
+Source/ contiene il codice, Tests/ i controlli, Analisi/ le evidenze e copertura.

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<dictionary title="SuperSnippetto">
+  <suite name="SuperSnippetto" code="ELcl" description="Comandi locali per la libreria e l’espansione dei frammenti.">
+    <command name="enable" code="ELclEnbl" description="Toglie la pausa globale e salva la preferenza.">
+      <cocoa class="ELEnableCommand"/>
+      <result type="text"/>
+    </command>
+    <command name="disable" code="ELclDsbl" description="Mette in pausa l’espansione e salva la preferenza.">
+      <cocoa class="ELDisableCommand"/>
+      <result type="text"/>
+    </command>
+    <command name="expand" code="ELclXpnd" description="Richiede l’inserimento normale di un frammento nel campo di testo esterno. I permessi, gli ambiti e gli eventuali dialoghi restano attivi.">
+      <cocoa class="ELExpandCommand"/>
+      <direct-parameter type="text" description="UUID oppure abbreviazione univoca del frammento."/>
+      <result type="text" description="Conferma la richiesta asincrona; non certifica l’inserimento nell’app di destinazione."/>
+    </command>
+    <command name="import" code="ELclImpt" description="Importa uno o più file compatibili. Se un file non è valido, annulla l’intera importazione.">
+      <cocoa class="ELImportCommand"/>
+      <direct-parameter description="Un percorso POSIX assoluto o una lista di percorsi POSIX assoluti.">
+        <type type="text"/>
+        <type type="text" list="yes"/>
+      </direct-parameter>
+      <result type="text"/>
+    </command>
+    <command name="delete" code="ELclDelt" description="Sposta i frammenti nel cestino recuperabile della libreria.">
+      <cocoa class="ELDeleteCommand"/>
+      <direct-parameter description="Un UUID o una lista di UUID di frammenti attivi.">
+        <type type="text"/>
+        <type type="text" list="yes"/>
+      </direct-parameter>
+      <result type="text"/>
+    </command>
+    <command name="status" code="ELclStat" description="Restituisce lo stato corrente dell’espansione e il numero di frammenti attivi.">
+      <cocoa class="ELStatusCommand"/>
+      <result type="text"/>
+    </command>
+  </suite>
+</dictionary>
