@@ -18,7 +18,9 @@ sync103, LZ4frame109, aTextImport56, aTextMacro70, legacy62.
 I 9 nuovi controlli cloud usano una cartella temporanea simulata; i 13 controlli
 sui predefiniti verificano persistenza, tutte le modalità e frammenti preesistenti.
 Il percorso della ricerca e dell’inserimento confermato dall’utente nella 0.3.4
-resta invariato in questa versione.
+resta invariato in questa versione. Nell’app 0.3.5 installata sono stati verificati
+il pulsante Usa iCloud Drive, i quattro valori del menu Quando espandere e le
+tre regole di parola/maiuscole, senza cambiare le impostazioni personali.
 
 AGGIORNAMENTO 0.3.4 — RICERCA E CAMPO ORIGINALE
 Ricerca con titolo, abbreviazioni/alias e anteprima di testo, anche per HTML.
