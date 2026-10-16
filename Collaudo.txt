@@ -1,3 +1,29 @@
+AGGIORNAMENTO 0.3.2 — IMPORTAZIONE ATEXT
+
+Corretto il riconoscimento dei JSON aText a elenco numerico e dei vecchi
+.atext Apple NSKeyedArchiver, binari/XML, oltre alla variante LZ4 precedente.
+Gli archivi sono letti come dati: nessuna classe archiviata viene istanziata.
+Convertite le date legacy tra parentesi speciali e gli stili localizzati
+full/long/medium/short; gli elementi non rappresentabili restano disattivati.
+
+564 controlli passati: Core106, template39, engine5, automazione23, sync94,
+LZ4 109, importer56, macro70 e legacy62. I62 nuovi controlli sintetici
+includono UID, cicli, classi ignote, XML/binario, regole per app, null, date,
+reimportazione idempotente e salvataggio/riapertura. Campioni personali esclusi
+sia dai test distribuiti sia da Git.
+
+Entrambi gli export personali verificati in store temporanei:5 gruppi e147
+snippet per file; contenuti finali equivalenti. Salvataggio/riapertura e
+reimportazione dello stesso file preservano dati e conteggi. Originali intatti.
+Aggiornata la copia in /Applications, conservando backup della build precedente.
+Creata una copia della libreria dal pannello Backup prima dell'import reale.
+Import JSON dall'interfaccia riuscito:147 aggiunti,148 totali. Frammento
+precedente, tre elementi nel cestino e impostazioni preservati.
+Dopo la nuova firma ad hoc l'app richiede nuovamente i consensi macOS; nessun
+consenso concesso automaticamente. Espansione globale non collaudata.
+
+--- Verifiche precedenti ---
+
 COLLAUDO SUPERSNIPPETTO 0.3.1 — 16 ottobre 2026
 
 Build arm64 macOS13+, Swift6.3.3 in modalità Swift5, -O: riuscita.

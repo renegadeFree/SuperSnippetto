@@ -1,4 +1,4 @@
-SUPERSNIPPETTO 0.3.1
+SUPERSNIPPETTO 0.3.2
 Implementazione macOS indipendente di un espansore di testo.
 La ricostruzione integrale di aText resta incompleta: Verifica.txt e
 Analisi/Copertura.csv descrivono puntualmente lo stato.
@@ -64,7 +64,11 @@ delete usa il cestino; expand invia una richiesta asincrona e usa i normali
 permessi/regole. Eventuali consensi di automazione dipendono da macOS.
 
 IMPORTAZIONE ATEXT E ALIAS
-File > Importa accetta anche la variante .atext non protetta osservata.
+File > Importa accetta file .atext LZ4, vecchi archivi .atext Apple
+NSKeyedArchiver (binari o XML) e aTextData.json a chiavi numeriche.
+Sono convertite anche le date legacy tra parentesi speciali, per esempio
+【date:full locale:it】. L’archivio è letto come dati: nessuna classe
+archiviata o script viene istanziato/eseguito.
 Gli elementi importati partono in modalità manuale. Rivedi gli avvisi:
 regole di gruppo, script e macro incompatibili disattivano gli elementi.
 Le note spiegano i limiti; “Copia dati originali” conserva il record sorgente.
@@ -94,5 +98,5 @@ Import unisce i dati senza sostituire silenziosamente elementi differenti.
 Le macro specifiche di TextExpander non sono convertite; .atext è parziale.
 Vedi Analisi/Importazione-aText.json per evidenze e limiti della conversione.
 ./build.sh ricompila e firma localmente con i Command Line Tools Apple.
-./test.sh esegue i 502 controlli; non simula input né abilita permessi di sistema.
+./test.sh esegue i 564 controlli; non simula input né abilita permessi di sistema.
 Source/ contiene il codice, Tests/ i controlli, Analisi/ le evidenze e copertura.

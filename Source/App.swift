@@ -66,7 +66,7 @@ final class DesktopController: ObservableObject {
     func importLibrary() {
         let panel = NSOpenPanel(); panel.title = "Importa frammenti"; panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.json, .commaSeparatedText, .propertyList, .data]
-        panel.message = "JSON, CSV, raccolte TextExpander testuali o file aText .atext non protetti. Le conversioni incomplete sono segnalate e disattivate."
+        panel.message = "JSON di SuperSnippetto o aText, CSV, raccolte TextExpander testuali o esportazioni .atext, anche legacy. Le conversioni incomplete sono segnalate e disattivate."
         let completed: (NSApplication.ModalResponse) -> Void = { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             // Let AppKit close the sheet before SwiftUI updates its lists or shows an alert.

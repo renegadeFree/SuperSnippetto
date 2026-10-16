@@ -12,6 +12,11 @@ enum ATextImporter {
 
     static func decode(_ data: Data) throws -> Result {
         guard data.count <= maximumBytes else { throw invalid("Documento oltre 64 MB.") }
+        let prefix = String(data: data.prefix(256), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FEFF}"))) ?? ""
+        if data.starts(with: Data("bplist".utf8)) || prefix.hasPrefix("<?xml") || prefix.hasPrefix("<plist") {
+            let legacy = try LegacyATextArchive.decode(data)
+            return try readGroups(legacy.groups, sources: legacy.sources, issues: legacy.issues)
+        }
         let bytes = Data(data)
         guard let separator = bytes.prefix(16_384).firstIndex(of: 0) else {
             throw invalid("Intestazione mancante o troppo lunga.")
@@ -27,10 +32,20 @@ enum ATextImporter {
             throw invalid("Variante protetta o intestazione aText non supportata.")
         }
         let payload = try LZ4FrameCodec.decode(Data(bytes[(separator + 1)...]), maxOutput: maximumBytes)
-        guard let roots = try JSONSerialization.jsonObject(with: payload) as? [[String: Any]] else {
+        return try decodeJSON(payload)
+    }
+
+    static func decodeJSON(_ data: Data) throws -> Result {
+        guard data.count <= maximumBytes else { throw invalid("Documento oltre 64 MB.") }
+        guard let roots = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             throw invalid("Il contenuto deve essere un elenco di gruppi.")
         }
+        return try readGroups(roots)
+    }
+
+    private static func readGroups(_ roots: [[String: Any]], sources: [UUID: [String: Any]] = [:], issues: [UUID: [String]] = [:]) throws -> Result {
         var reader = Reader()
+        reader.legacySources = sources; reader.legacyIssues = issues
         for root in roots { try reader.group(root, parentID: nil, inheritedBlock: false, depth: 0) }
         return Result(library: reader.library, warnings: reader.warnings)
     }
@@ -43,6 +58,8 @@ enum ATextImporter {
         var identifiers: Set<UUID> = []
         var metadataBytes = 0
         var warnedAboutManual = false
+        var legacySources: [UUID: [String: Any]] = [:]
+        var legacyIssues: [UUID: [String]] = [:]
 
         mutating func identifier(_ record: [String: Any]) throws -> UUID {
             guard let raw = record["0"] as? String, let id = UUID(uuidString: raw) else {
@@ -68,10 +85,10 @@ enum ATextImporter {
             return number.intValue
         }
         mutating func source(_ record: [String: Any], omitChildren: Bool = false) throws -> String {
-            var own = record
+            var own = (record["0"] as? String).flatMap(UUID.init(uuidString:)).flatMap { legacySources[$0] } ?? record
             // Children retain their own records and parent links: do not duplicate an entire
             // subtree in every ancestor's metadata (which amplifies deeply nested inputs).
-            if omitChildren { own.removeValue(forKey: "13") }
+            if omitChildren { own.removeValue(forKey: "13"); own.removeValue(forKey: "Items") }
             let bytes = try JSONSerialization.data(withJSONObject: own, options: [.sortedKeys])
             guard bytes.count <= ATextImporter.maximumBytes - metadataBytes,
                   let text = String(data: bytes, encoding: .utf8) else {
@@ -95,15 +112,25 @@ enum ATextImporter {
             item.name = try string(record, "2", fallback: "Gruppo importato")
             item.parentID = parentID
             item.atextSourceJSON = try source(record, omitChildren: true)
-            let unsupported = ["1", "3", "4", "5", "6", "7", "8", "14", "16", "17", "19", "20", "21"]
+            var unsupported = ["1", "3", "4", "5", "6", "7", "8", "14", "16", "17", "19", "20", "21"]
                 .filter { meaningful(record[$0]) }
-            let known = Set(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "16", "17", "19", "20", "21", "22", "99"])
+            // Older numeric JSON stores the all-applications default in key15.
+            // Other availability variants remain blocked; do not widen their scope.
+            if meaningful(record["15"]) {
+                let availability = record["15"] as? [String: Any]
+                let mode = availability?["0"] as? NSNumber
+                let unrestricted = availability?.count == 1 && mode != nil && CFGetTypeID(mode!) != CFBooleanGetTypeID() && mode!.doubleValue == 0
+                if !unrestricted { unsupported.append("15") }
+            }
+            let known = Set(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "19", "20", "21", "22", "99"])
             let unknown = record.keys.filter { !known.contains($0) && meaningful(record[$0]) }.sorted()
-            let blocked = inheritedBlock || !unsupported.isEmpty || !unknown.isEmpty
+            let legacy = legacyIssues[item.id] ?? []
+            let blocked = inheritedBlock || !unsupported.isEmpty || !unknown.isEmpty || !legacy.isEmpty
             item.enabled = !blocked
             if !unsupported.isEmpty || !unknown.isEmpty {
                 warnings.append("Gruppo \(item.name): regole aText non rappresentate (proprietà \((unsupported + unknown).joined(separator: ", "))). Gruppo e discendenti disattivati; originali conservati.")
             }
+            warnings += legacy.map { "Gruppo \(item.name): \($0) Gruppo e discendenti disattivati." }
             library.groups.append(item)
             guard let rawChildren = record["13"] else { return }
             guard let children = rawChildren as? [[String: Any]] else { throw ATextImporter.invalid("I figli del gruppo devono essere oggetti JSON.") }
@@ -141,7 +168,7 @@ enum ATextImporter {
                 warnings.append("I frammenti aText usano l'attivazione manuale: verifica le regole prima di attivare l'espansione automatica.")
                 warnedAboutManual = true
             }
-            var issues: [String] = []
+            var issues = legacyIssues[item.id] ?? []
             let kind = try string(record, "3", fallback: "t")
             let plain = try string(record, "4")
             switch kind {

@@ -27,8 +27,10 @@ La prima volta concedi personalmente Accessibilità e Monitoraggio input dalle I
 - Testo, rich text, HTML, immagini locali e script con abilitazione esplicita.
 - Campi, menu di scelta, checkbox, date, condizioni e trasformazioni.
 - Backup, cestino recuperabile e sincronizzazione tramite cartella.
-- Import/export JSON e CSV, import TextExpander testuale e import `.atext` parziale.
+- Import/export JSON e CSV, import TextExpander testuale e import `.atext` parziale (LZ4 e vecchi archivi Apple NSKeyedArchiver).
 - Dizionario AppleScript; esempio di sola lettura in `Automazione.applescript`.
+
+Le esportazioni `aTextData.json` con gruppi a chiavi numeriche sono riconosciute automaticamente. Le variabili data legacy `【date:full locale:it】` e gli stili full/long/medium/short vengono convertiti. Gli archivi Apple sono letti come dati, senza istanziare le classi archiviate.
 
 Gli elementi `.atext` importati usano l'attivazione manuale. Script, regole o macro non convertibili restano disattivati con avvisi e metadati originali conservati. Nessuna gestione di archivi protetti o rimozione di licenze/protezioni. Nessun codice, asset o archivio dell'app analizzata è incluso nella repository.
 
@@ -48,7 +50,7 @@ Restano compatibili anche gli identificatori interni dei documenti e il file di 
 ./test.sh
 ```
 
-502 controlli locali su libreria, modelli, script, automazione, sincronizzazione, decoder LZ4 e importazione/conversione aText. I test usano dati sintetici e temporanei. `NSFileCoordinator` richiede l'accesso al servizio macOS e può non funzionare dentro sandbox di esecuzione esterni.
+564 controlli locali su libreria, modelli, script, automazione, sincronizzazione, decoder LZ4 e importazione/conversione aText. I test usano dati sintetici e temporanei. `NSFileCoordinator` richiede l'accesso al servizio macOS e può non funzionare dentro sandbox di esecuzione esterni.
 
 Build, firma e interfaccia sono verificate sul Mac locale. L'espansione globale e le scorciatoie nelle altre app richiedono ancora collaudo dopo i consensi macOS dell'utente; la sincronizzazione non è ancora collaudata fra due Mac fisici con un provider cloud reale.
 

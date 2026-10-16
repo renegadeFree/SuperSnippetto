@@ -260,6 +260,11 @@ final class LibraryStore: ObservableObject {
         case "atext":
             let result = try ATextImporter.decode(bytes)
             incoming = result.library; warnings = result.warnings
+        case "json":
+            if try JSONSerialization.jsonObject(with: bytes) is [Any] {
+                let result = try ATextImporter.decodeJSON(bytes)
+                incoming = result.library; warnings = result.warnings
+            } else { incoming = try Self.decodeJSON(bytes) }
         default: incoming = try Self.decodeJSON(bytes)
         }
         try Self.validate(incoming)

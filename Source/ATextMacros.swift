@@ -3,6 +3,21 @@ import Foundation
 /// A conservative bridge for observed aText inline markup. This is original code;
 /// unsupported operations remain verbatim and cause the importer to disable the item.
 enum ATextMacroConverter {
+    /// Older macOS exports use full-width brackets instead of inline XML.
+    static func convertLegacy(_ input: String) -> (text: String, warnings: [String]) {
+        let pattern = try! NSRegularExpression(pattern: #"【(date|time):(full|long|medium|short)(?:\s+locale:([A-Za-z][A-Za-z0-9_-]{0,63}))?\s*】"#)
+        let output = NSMutableString(string: input)
+        for match in pattern.matches(in: input, range: NSRange(input.startIndex..., in: input)).reversed() {
+            let text = input as NSString
+            let type = text.substring(with: match.range(at: 1)), format = text.substring(with: match.range(at: 2))
+            let locale = match.range(at: 3).location == NSNotFound ? "" : " locale=\"\(text.substring(with: match.range(at: 3)))\""
+            output.replaceCharacters(in: match.range, with: "<atext type=\"\(type)\" format=\"\(format)\"\(locale)></atext>")
+        }
+        let text = output as String
+        let warnings = text.contains("【") || text.contains("】") ? ["Macro legacy tra parentesi speciali non convertita; originale conservato."] : []
+        return (text, warnings)
+    }
+
     static func convert(_ input: String) -> (text: String, warnings: [String]) {
         var warnings: [String] = [], output = "", cursor = input.startIndex, count = 0
         var fieldDefinitions: [String: String] = [:]
@@ -129,8 +144,13 @@ enum ATextMacroConverter {
             let localeName = a.removeValue(forKey: "locale") ?? Locale.current.identifier
             guard localeName.count < 100, safe(localeName), localeName.range(of: "^[A-Za-z][A-Za-z0-9_@=.-]*$", options: .regularExpression) != nil else { return nil }
             var sourceFormat = a.removeValue(forKey: "format") ?? ""
-            if type == "date" { sourceFormat = ["full": "D", "long": "D", "medium": "D", "short": "d"][sourceFormat] ?? sourceFormat }
-            if type == "time" { sourceFormat = ["full": "T", "long": "T", "medium": "T", "short": "t"][sourceFormat] ?? sourceFormat }
+            var legacyFormat: String?
+            let styles: [String: DateFormatter.Style] = ["full": .full, "long": .long, "medium": .medium, "short": .short]
+            if (type == "date" || type == "time"), let style = styles[sourceFormat] {
+                let formatter = DateFormatter(); formatter.locale = Locale(identifier: localeName)
+                if type == "date" { formatter.dateStyle = style } else { formatter.timeStyle = style }
+                legacyFormat = formatter.dateFormat
+            }
             let standard = preset || sourceFormat.isEmpty
             if sourceFormat.isEmpty { sourceFormat = "f" }
             var offset = ""
@@ -139,7 +159,7 @@ enum ATextMacroConverter {
                       let amount = Int(shift.dropFirst(10).dropLast()) else { return nil }
                 offset = "\(amount >= 0 ? "+" : "")\(amount)d|"
             }
-            guard a.isEmpty, let format = dateFormat(sourceFormat, preset: standard, locale: Locale(identifier: localeName)), safe(format) else { return nil }
+            guard a.isEmpty, let format = legacyFormat ?? dateFormat(sourceFormat, preset: standard, locale: Locale(identifier: localeName)), safe(format) else { return nil }
             return "{{date:\(offset)\(argument(format))|\(argument(localeName))}}"
         default: return nil
         }
